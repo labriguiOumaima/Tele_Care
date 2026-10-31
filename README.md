@@ -3,8 +3,8 @@ Tele_Care est une application d’assistance à domicile pour personnes âgées,
 
 
 ## Diagramme de classes UML
-<img width="1196" height="3394" alt="class_diag_tele_care" src="https://github.com/user-attachments/assets/41f32c21-8d1d-43ae-8fc5-688a6e17d869" />
 
+<img width="1414" height="3452" alt="Diagramme_telecare" src="https://github.com/user-attachments/assets/2e17b7da-b78c-4ec4-9955-2f8a8f618292" />
 
 
 ## Architecture du projet
