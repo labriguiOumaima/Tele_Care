@@ -5,7 +5,7 @@ Il gère la **prise en charge terrain** d'une urgence : affectation d'un assista
 
 | | |
 |---|---|
-| **Réalisé par** | Soukaina — Personne 3 |
+| **Réalisé par** | Soukaina |
 | **Port** | 8083 |
 | **Base de données** | H2 en mémoire (`interventionsdb`), propre au service |
 | **Jalon livré** | **v1.0** — Mise en place des services métier |
@@ -73,6 +73,7 @@ AFFECTEE  ──(arrivée enregistrée)──▶  SUR_PLACE  ──(compte-rendu
 | Enregistrer l'arrivée | Statut `AFFECTEE` | `409` |
 | Rédiger le compte-rendu | Statut `SUR_PLACE` | `409` |
 | Clôturer | Statut `SUR_PLACE` et compte-rendu rédigé | `409` |
+| Modifier l'assistant | Statut différent de `CLOTUREE` | `409` |
 | Supprimer | Statut différent de `CLOTUREE` | `409` |
 
 ## 4. API REST
@@ -82,6 +83,7 @@ AFFECTEE  ──(arrivée enregistrée)──▶  SUR_PLACE  ──(compte-rendu
 | `GET` | `/interventions` | Lister (filtre optionnel `?statut=SUR_PLACE`) | `200` |
 | `GET` | `/interventions/{id}` | Consulter une intervention | `200` |
 | `POST` | `/interventions/new` | Créer une intervention | `201` + `Location` |
+| `PUT` | `/interventions/{id}` | Modifier l'assistant affecté (interdit si `CLOTUREE`) | `200` |
 | `PUT` | `/interventions/{id}/arrivee` | Enregistrer l'heure d'arrivée (corps facultatif, heure actuelle par défaut) | `200` |
 | `PUT` | `/interventions/{id}/compte-rendu` | Rédiger le compte-rendu | `200` |
 | `PUT` | `/interventions/{id}/cloture` | Clôturer l'intervention | `200` |
@@ -117,14 +119,14 @@ La collection Postman est dans [`postman/service-interventions.postman_collectio
 2. Dans Postman : **Import** puis choisir le fichier de la collection.
 3. Clic droit sur la collection → **Run collection**.
 
-**27 requêtes, 36 tests automatiques, tous réussis.**
+**31 requêtes, 42 tests automatiques, tous réussis.**
 
 | Dossier | Couverture |
 |---|---|
 | 1 — Cas valides | Cycle complet : création, consultation, arrivée, compte-rendu, clôture, filtre |
-| 2 — Erreurs de validation | Corps invalide, JSON cassé, statut inconnu (`400`) |
+| 2 — Erreurs de validation | Corps invalide, JSON cassé, statut inconnu, `assistantNom` vide (`400`) |
 | 3 — Ressources inexistantes | Identifiant inexistant sur chaque endpoint (`404`) |
-| 4 — Règles métier | Doublon, clôture avant arrivée, double arrivée, suppression interdite (`409`), suppression valide (`204`) |
+| 4 — Règles métier | Doublon, clôture avant arrivée, double arrivée, modification ou suppression d'une intervention clôturée (`409`), suppression valide (`204`) |
 
 ## 7. Avancement par jalon
 

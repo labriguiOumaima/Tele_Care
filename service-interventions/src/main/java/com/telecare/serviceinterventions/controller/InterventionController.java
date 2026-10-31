@@ -1,5 +1,5 @@
 package com.telecare.serviceinterventions.controller;
-
+import com.telecare.serviceinterventions.dto.InterventionModificationDto;
 import com.telecare.serviceinterventions.dto.ArriveeDto;
 import com.telecare.serviceinterventions.dto.CompteRenduDto;
 import com.telecare.serviceinterventions.dto.InterventionCreationDto;
@@ -48,7 +48,13 @@ public class InterventionController {
         return ResponseEntity.created(URI.create("/interventions/" + intervention.getId()))
                 .body(interventionMapper.toDto(intervention));
     }
-
+    @PutMapping("/{id}")
+    public ResponseEntity<InterventionDto> modifierIntervention(
+            @PathVariable Long id,
+            @Valid @RequestBody InterventionModificationDto dto) {
+        return ResponseEntity.ok(interventionMapper.toDto(
+                interventionService.modifierIntervention(id, dto.assistantNom())));
+    }
     // Le corps est facultatif : sans heure, le service prend l'heure actuelle
     @PutMapping("/{id}/arrivee")
     public ResponseEntity<InterventionDto> enregistrerArrivee(
