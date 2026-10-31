@@ -1,0 +1,1056 @@
+{
+  "info": {
+    "name": "Tele-Care - service-interventions (jalon v1.0)",
+    "description": "Collection Postman de la Personne 3 : CRUD et cycle de vie AFFECTEE > SUR_PLACE > CLOTUREE. Lancer le service sur le port 8083 puis executer avec le Collection Runner.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1 - Cas valides (cycle complet)",
+      "item": [
+        {
+          "name": "1.1 Liste vide au depart (GET)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Reponse = tableau\", function () { pm.expect(pm.response.json()).to.be.an(\"array\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.2 Creer une intervention (POST)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/new",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "new"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alertId\": {{alertId}},\n  \"assistantNom\": \"Karim Benali\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"alertId\", Math.floor(Math.random() * 900000) + 100000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "var j = pm.response.json();",
+                  "pm.collectionVariables.set(\"interventionId\", j.id);",
+                  "pm.test(\"statut = AFFECTEE\", function () { pm.expect(j.statut).to.eql(\"AFFECTEE\"); });",
+                  "pm.test(\"Header Location present\", function () { pm.response.to.have.header(\"Location\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.3 Consulter par id (GET)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"alertId conserve\", function () { pm.expect(pm.response.json().alertId).to.eql(pm.collectionVariables.get(\"alertId\")); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.4 Enregistrer l'arrivee (PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionId}}/arrivee",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionId}}",
+                "arrivee"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"statut = SUR_PLACE\", function () { pm.expect(j.statut).to.eql(\"SUR_PLACE\"); });",
+                  "pm.test(\"heureArrivee renseignee\", function () { pm.expect(j.heureArrivee).to.not.be.null; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.5 Rediger le compte-rendu (PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionId}}/compte-rendu",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionId}}",
+                "compte-rendu"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"compteRendu\": \"Personne retrouvee consciente, constantes normales. Contact prevenu.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"compteRendu enregistre\", function () { pm.expect(pm.response.json().compteRendu).to.include(\"consciente\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.6 Cloturer l'intervention (PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionId}}/cloture",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionId}}",
+                "cloture"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"statut = CLOTUREE\", function () { pm.expect(pm.response.json().statut).to.eql(\"CLOTUREE\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.7 Filtrer par statut CLOTUREE (GET)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions?statut=CLOTUREE",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions"
+              ],
+              "query": [
+                {
+                  "key": "statut",
+                  "value": "CLOTUREE"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Au moins une intervention CLOTUREE\", function () { pm.expect(pm.response.json().length).to.be.above(0); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2 - Erreurs de validation (400)",
+      "item": [
+        {
+          "name": "2.1 Creation sans alertId ni assistantNom",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/new",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "new"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assistantNom\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 400\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.2 Creation avec JSON invalide",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/new",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "new"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{ ceci n est pas du json",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 400\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.3 Statut inconnu dans le filtre",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions?statut=INCONNU",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions"
+              ],
+              "query": [
+                {
+                  "key": "statut",
+                  "value": "INCONNU"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 400\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3 - Ressources inexistantes (404)",
+      "item": [
+        {
+          "name": "3.1 GET id inexistant",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/999999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "999999"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.2 PUT arrivee id inexistant",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/999999/arrivee",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "999999",
+                "arrivee"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.3 PUT compte-rendu id inexistant",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/999999/compte-rendu",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "999999",
+                "compte-rendu"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"compteRendu\": \"test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.4 PUT cloture id inexistant",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/999999/cloture",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "999999",
+                "cloture"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.5 DELETE id inexistant",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/999999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "999999"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4 - Regles metier (409) et validation des corps",
+      "item": [
+        {
+          "name": "4.1 Creer une intervention de test",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/new",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "new"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alertId\": {{alertId2}},\n  \"assistantNom\": \"Sara El Amrani\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"alertId2\", Math.floor(Math.random() * 900000) + 100000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.collectionVariables.set(\"interventionId2\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.2 Doublon : meme alertId",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/new",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "new"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alertId\": {{alertId2}},\n  \"assistantNom\": \"Autre Assistant\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.3 Cloture avant l'arrivee",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionId2}}/cloture",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionId2}}",
+                "cloture"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.4 Compte-rendu avant l'arrivee",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionId2}}/compte-rendu",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionId2}}",
+                "compte-rendu"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"compteRendu\": \"trop tot\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.5 Arrivee dans le futur (validation)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionId2}}/arrivee",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionId2}}",
+                "arrivee"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"heureArrivee\": \"2099-01-01T10:00:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 400\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.6 Arrivee valide",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionId2}}/arrivee",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionId2}}",
+                "arrivee"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.7 Arrivee une deuxieme fois",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionId2}}/arrivee",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionId2}}",
+                "arrivee"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.8 Cloture sans compte-rendu",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionId2}}/cloture",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionId2}}",
+                "cloture"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.9 Compte-rendu vide (validation)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionId2}}/compte-rendu",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionId2}}",
+                "compte-rendu"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"compteRendu\": \"   \"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 400\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.10 Supprimer une intervention CLOTUREE",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.11 Supprimer une intervention non cloturee",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionId2}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionId2}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.12 Verifier la suppression",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionId2}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionId2}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8083"
+    },
+    {
+      "key": "alertId",
+      "value": ""
+    },
+    {
+      "key": "alertId2",
+      "value": ""
+    },
+    {
+      "key": "interventionId",
+      "value": ""
+    },
+    {
+      "key": "interventionId2",
+      "value": ""
+    }
+  ]
+}
