@@ -5,7 +5,7 @@ Il gère la **prise en charge terrain** d'une urgence : affectation d'un assista
 
 | | |
 |---|---|
-| **Réalisé par** | Soukaina |
+
 | **Port** | 8083 |
 | **Base de données** | H2 en mémoire (`interventionsdb`), propre au service |
 | **Jalon livré** | **v2.0** — Client Eureka : enregistrement de ce service (après le jalon v1.0 : services métier) |
