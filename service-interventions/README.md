@@ -8,7 +8,7 @@ Il gère la **prise en charge terrain** d'une urgence : affectation d'un assista
 | **Réalisé par** | Soukaina |
 | **Port** | 8083 |
 | **Base de données** | H2 en mémoire (`interventionsdb`), propre au service |
-| **Jalon livré** | **v1.0** — Mise en place des services métier |
+| **Jalon livré** | **v2.0** — Client Eureka : enregistrement de ce service (après le jalon v1.0 : services métier) |
 
 ---
 
@@ -21,6 +21,7 @@ Il gère la **prise en charge terrain** d'une urgence : affectation d'un assista
 | Spring Boot | 3.5.6 |
 | Spring Cloud (BOM) | 2025.0.0 (aucune dépendance Cloud utilisée pour l'instant) |
 | Postman | Pour rejouer la collection de tests |
+| Serveur Eureka | Port 8761, fourni par l'équipe. Sans lui, le service démarre quand même (avertissements de connexion dans la console) |
 
 ## 2. Architecture du service
 
@@ -111,6 +112,31 @@ Depuis le dossier `service-interventions` :
 
 Vérification : <http://localhost:8083/actuator/health> doit renvoyer `{"status":"UP"}`.
 
+### 5.1 Enregistrement dans Eureka (jalon v2.0)
+
+Le service est un **client Eureka** : au démarrage, il s'enregistre auprès du serveur Eureka (port 8761) pour pouvoir être découvert par la Gateway.
+
+| Élément | Valeur |
+|---|---|
+| Nom dans Eureka | `SERVICE-INTERVENTIONS` (valeur de `spring.application.name`) |
+| Port | 8083 |
+| Identifiant d'instance | `localhost:service-interventions:8083` |
+| Statut attendu | `UP` |
+
+Configuration dans `application.properties` :
+
+```properties
+eureka.client.service-url.defaultZone=http://localhost:8761/eureka/
+eureka.instance.hostname=localhost
+eureka.instance.instance-id=${eureka.instance.hostname}:${spring.application.name}:${server.port}
+```
+
+La dépendance `spring-cloud-starter-netflix-eureka-client` est ajoutée au `pom.xml`, et la classe principale porte `@EnableDiscoveryClient`.
+
+**Vérification** : démarrer le serveur Eureka, puis le service, et ouvrir <http://localhost:8761>. L'application `SERVICE-INTERVENTIONS` doit apparaître avec le statut `UP`.
+
+**Accès via la Gateway** (une fois la Gateway lancée) : `http://localhost:8080/service-interventions/interventions` en routage dynamique, ou `http://localhost:8080/interventions` en routage statique. Pour rejouer la collection Postman à travers la Gateway, il suffit de changer la variable `baseUrl` de la collection.
+
 ## 6. Tests
 
 La collection Postman est dans [`postman/service-interventions.postman_collection.json`](postman/service-interventions.postman_collection.json).
@@ -133,7 +159,7 @@ La collection Postman est dans [`postman/service-interventions.postman_collectio
 | Jalon | Contenu pour service-interventions | État |
 |---|---|---|
 | **v1.0** | Couches Controller / Service / Repository, DTO validés, base propre, API REST, gestion des erreurs, tests Postman | **Terminé** |
-| v2.0 | Enregistrement dans Eureka (client) | À venir |
+| **v2.0** | Client Eureka : enregistrement de ce service (statut `UP`). Le serveur Eureka et la Gateway ne font pas partie de ce service : ils sont réalisés par l'infrastructure de l'équipe | **Terminé** |
 | v3.0 | Configuration depuis le Config Server | À venir |
 | v4.0 | Client OpenFeign vers service-alertes (consultation du `Protocol`) | À venir |
 | v5.0 | Kafka : consommer `alert-triggered`, publier `intervention-assigned` et `emergency-resolved` | À venir |
