@@ -9,4 +9,5 @@ Tele_Care est une application d’assistance à domicile pour personnes âgées,
 
 ## Architecture du projet
 
-<img width="1848" height="944" alt="Architecture_tele_care" src="https://github.com/user-attachments/assets/a40b86f1-90d9-4703-bb06-410a0a96ee4c" />
+<img width="2360" height="1428" alt="architecture_diagram" src="https://github.com/user-attachments/assets/6f0c5a86-8503-4355-9816-8738f6b60188" />
+
