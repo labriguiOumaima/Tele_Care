@@ -82,7 +82,15 @@ public class InterventionService {
         intervention.setStatut(StatutIntervention.CLOTUREE);
         return interventionRepository.save(intervention);
     }
-
+    @Transactional
+    public Intervention modifierIntervention(Long id, String assistantNom) {
+        Intervention intervention = getInterventionById(id);
+        if (intervention.getStatut() == StatutIntervention.CLOTUREE) {
+            throw new TransitionInterditeException("Une intervention CLOTUREE ne peut plus etre modifiee");
+        }
+        intervention.setAssistantNom(assistantNom);
+        return interventionRepository.save(intervention);
+    }
     @Transactional
     public void supprimerIntervention(Long id) {
         Intervention intervention = getInterventionById(id);

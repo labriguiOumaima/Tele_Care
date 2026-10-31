@@ -121,6 +121,50 @@
           ]
         },
         {
+          "name": "1.3b Modifier l'assistant (PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assistantNom\": \"Nadia Idrissi\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"assistantNom modifie\", function () { pm.expect(pm.response.json().assistantNom).to.eql(\"Nadia Idrissi\"); });",
+                  "pm.test(\"statut inchange (AFFECTEE)\", function () { pm.expect(pm.response.json().statut).to.eql(\"AFFECTEE\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "1.4 Enregistrer l'arrivee (PUT)",
           "request": {
             "method": "PUT",
@@ -395,6 +439,48 @@
               }
             }
           ]
+        },
+        {
+          "name": "2.4 Modification avec assistantNom vide",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assistantNom\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 400\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -549,6 +635,48 @@
           "request": {
             "method": "DELETE",
             "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/999999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "999999"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.6 PUT modification id inexistant",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assistantNom\": \"Test\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
               "raw": "{{baseUrl}}/interventions/999999",
               "host": [
@@ -949,6 +1077,48 @@
           "request": {
             "method": "DELETE",
             "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.10b Modifier une intervention CLOTUREE",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assistantNom\": \"Trop tard\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
               "raw": "{{baseUrl}}/interventions/{{interventionId}}",
               "host": [
