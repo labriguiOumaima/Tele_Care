@@ -5,10 +5,9 @@ Il gère la **prise en charge terrain** d'une urgence : affectation d'un assista
 
 | | |
 |---|---|
-
 | **Port** | 8083 |
 | **Base de données** | H2 en mémoire (`interventionsdb`), propre au service |
-| **Jalon livré** | **v2.0** — Client Eureka : enregistrement de ce service (après le jalon v1.0 : services métier) |
+| **Jalon livré** | **v3.0** — Configuration centralisée : ce service lit sa configuration depuis le Config Server (après v1.0 : services métier, v2.0 : client Eureka) |
 
 ---
 
@@ -19,9 +18,10 @@ Il gère la **prise en charge terrain** d'une urgence : affectation d'un assista
 | Java (JDK) | 17 |
 | Maven | Non requis, le wrapper `mvnw` est fourni |
 | Spring Boot | 3.5.6 |
-| Spring Cloud (BOM) | 2025.0.0 (aucune dépendance Cloud utilisée pour l'instant) |
+| Spring Cloud (BOM) | 2025.0.0 (clients Eureka et Config) |
 | Postman | Pour rejouer la collection de tests |
-| Serveur Eureka | Port 8761, fourni par l'équipe. Sans lui, le service démarre quand même (avertissements de connexion dans la console) |
+| Serveur Eureka | Port 8761. Sans lui, le service démarre quand même (avertissements de connexion dans la console) |
+| Config Server | Port 8888. **Sans lui, le service refuse de démarrer** (comportement voulu, voir 5.2) |
 
 ## 2. Architecture du service
 
@@ -49,7 +49,7 @@ src/main/java/com/telecare/serviceinterventions
 
 ## 3. Modèle de données
 
-Entité **`Intervention`**, conforme au diagramme de classes de l'équipe :
+Entité **`Intervention`**, conforme au diagramme de classes du projet :
 
 | Attribut | Type | Description |
 |---|---|---|
@@ -62,7 +62,7 @@ Entité **`Intervention`**, conforme au diagramme de classes de l'équipe :
 
 ### Cycle de vie du statut
 
-Le cahier des charges ne fixe pas les valeurs de `statut`. Choix de conception de l'équipe :
+Le cahier des charges ne fixe pas les valeurs de `statut`. Choix de conception :
 
 ```
 AFFECTEE  ──(arrivée enregistrée)──▶  SUR_PLACE  ──(compte-rendu + clôture)──▶  CLOTUREE
@@ -104,6 +104,8 @@ POST /interventions/new
 
 ## 5. Lancer le service
 
+**Ordre de démarrage** : Eureka (8761), puis Config Server (8888), puis ce service (8083).
+
 Depuis le dossier `service-interventions` :
 
 ```powershell
@@ -123,7 +125,7 @@ Le service est un **client Eureka** : au démarrage, il s'enregistre auprès du 
 | Identifiant d'instance | `localhost:service-interventions:8083` |
 | Statut attendu | `UP` |
 
-Configuration dans `application.properties` :
+Configuration (située dans `config-repo/service-interventions.properties` depuis le jalon v3.0) :
 
 ```properties
 eureka.client.service-url.defaultZone=http://localhost:8761/eureka/
@@ -135,7 +137,30 @@ La dépendance `spring-cloud-starter-netflix-eureka-client` est ajoutée au `pom
 
 **Vérification** : démarrer le serveur Eureka, puis le service, et ouvrir <http://localhost:8761>. L'application `SERVICE-INTERVENTIONS` doit apparaître avec le statut `UP`.
 
-**Accès via la Gateway** (une fois la Gateway lancée) : `http://localhost:8080/service-interventions/interventions` en routage dynamique, ou `http://localhost:8080/interventions` en routage statique. Pour rejouer la collection Postman à travers la Gateway, il suffit de changer la variable `baseUrl` de la collection.
+
+### 5.2 Configuration centralisée (jalon v3.0)
+
+La configuration du service n'est plus dans le projet : elle est dans le dossier **`config-repo`**, à la racine du dépôt Git, et servie par le Config Server.
+
+| Élément | Emplacement |
+|---|---|
+| Configuration du service (port, base H2, JPA, erreurs, Eureka) | `config-repo/service-interventions.properties` |
+| Configuration locale | `service-interventions/src/main/resources/application.properties` : **deux lignes seulement** |
+
+Contenu de la configuration locale :
+
+```properties
+spring.application.name=service-interventions
+spring.config.import=configserver:http://localhost:8888
+```
+
+- `spring.application.name` identifie le fichier à charger côté serveur (`service-interventions.properties`).
+- `spring.config.import` charge la configuration distante au démarrage.
+- Sans `optional:`, le service **refuse de démarrer** si le Config Server est injoignable (comportement *fail-fast* voulu par le TP).
+
+La dépendance `spring-cloud-starter-config` est ajoutée au `pom.xml`.
+
+**Vérification** : ouvrir <http://localhost:8888/service-interventions/default>. La réponse doit contenir `server.port` à `8083`, `spring.datasource.url` à `jdbc:h2:mem:interventionsdb` et les propriétés Eureka. Le service démarre ensuite sans configuration locale, s'enregistre dans Eureka (`UP`), et la collection Postman reste à 42 tests réussis.
 
 ## 6. Tests
 
@@ -156,15 +181,8 @@ La collection Postman est dans [`postman/service-interventions.postman_collectio
 
 ## 7. Avancement par jalon
 
-| Jalon | Contenu pour service-interventions | État |
+| Jalon | Contenu | État |
 |---|---|---|
 | **v1.0** | Couches Controller / Service / Repository, DTO validés, base propre, API REST, gestion des erreurs, tests Postman | **Terminé** |
-| **v2.0** | Client Eureka : enregistrement de ce service (statut `UP`). Le serveur Eureka et la Gateway ne font pas partie de ce service : ils sont réalisés par l'infrastructure de l'équipe | **Terminé** |
-| v3.0 | Configuration depuis le Config Server | À venir |
-| v4.0 | Client OpenFeign vers service-alertes (consultation du `Protocol`) | À venir |
-| v5.0 | Kafka : consommer `alert-triggered`, publier `intervention-assigned` et `emergency-resolved` | À venir |
-| v6.0 | Circuit Breaker et Retry sur Feign, `@ControllerAdvice`, idempotence | À venir |
-
-## 8. Périmètre
-
-Ce service correspond uniquement à la **Personne 3** du cahier des charges. Les services `service-beneficiaires` (Personne 1), `service-alertes` (Personne 2) et l'infrastructure Eureka / Gateway / Kafka (Personne 4) sont développés par les autres membres de l'équipe.
+| **v2.0** | Client Eureka : enregistrement du service dans Eureka (statut `UP`) | **Terminé** |
+| **v3.0** | Configuration centralisée : fichier dans `config-repo`, service client du Config Server | **Terminé** |
