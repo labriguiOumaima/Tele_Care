@@ -1,10 +1,15 @@
 package com.telecare.serviceinterventions.service;
 
+import com.telecare.serviceinterventions.dto.InterventionDetailDto;
 import com.telecare.serviceinterventions.entite.Intervention;
 import com.telecare.serviceinterventions.entite.StatutIntervention;
 import com.telecare.serviceinterventions.exception.InterventionExistanteException;
 import com.telecare.serviceinterventions.exception.RessourceIntrouvableException;
 import com.telecare.serviceinterventions.exception.TransitionInterditeException;
+import com.telecare.serviceinterventions.feignClient.AlerteDto;
+import com.telecare.serviceinterventions.feignClient.AlerteRequest;
+import com.telecare.serviceinterventions.feignClient.ProtocolDto;
+import com.telecare.serviceinterventions.feignClient.ProtocolRequest;
 import com.telecare.serviceinterventions.repository.InterventionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,9 +21,15 @@ import java.util.List;
 public class InterventionService {
 
     private final InterventionRepository interventionRepository;
+    private final AlerteRequest alerteRequest;
+    private final ProtocolRequest protocolRequest;
 
-    public InterventionService(InterventionRepository interventionRepository) {
+    public InterventionService(InterventionRepository interventionRepository,
+                               AlerteRequest alerteRequest,
+                               ProtocolRequest protocolRequest) {
         this.interventionRepository = interventionRepository;
+        this.alerteRequest = alerteRequest;
+        this.protocolRequest = protocolRequest;
     }
 
     public List<Intervention> getAllInterventions(StatutIntervention statut) {
@@ -33,11 +44,51 @@ public class InterventionService {
                 .orElseThrow(() -> new RessourceIntrouvableException("Intervention introuvable : " + id));
     }
 
+    @Transactional(readOnly = true)
+    public InterventionDetailDto getInterventionDetail(Long id) {
+        Intervention intervention = getInterventionById(id);
+        AlerteDto alerte = alerteRequest.getAlerteById(intervention.getAlertId());
+        ProtocolDto protocole = protocolRequest.getProtocolByType(alerte.type());
+        return new InterventionDetailDto(
+                intervention.getId(),
+                intervention.getAlertId(),
+                intervention.getAssistantNom(),
+                intervention.getHeureArrivee(),
+                intervention.getCompteRendu(),
+                intervention.getStatut(),
+                alerte.type(),
+                alerte.gravite(),
+                alerte.statut(),
+                protocole.etapes(),
+                protocole.niveauPriorite());
+    }
+
     @Transactional
     public Intervention creerIntervention(Intervention intervention) {
+        // 1. Idempotence : l'alertId sert de cle. Verification AVANT tout appel externe.
         if (interventionRepository.existsByAlertId(intervention.getAlertId())) {
             throw new InterventionExistanteException(intervention.getAlertId());
         }
+
+        // 2. L'alerte doit exister chez service-alertes (404 si introuvable, 503 si injoignable)
+        AlerteDto alerte = alerteRequest.getAlerteById(intervention.getAlertId());
+
+        // 3. L'alerte doit etre DECLENCHEE (sinon elle est deja prise en charge ou resolue)
+        if (!"DECLENCHEE".equals(alerte.statut())) {
+            throw new TransitionInterditeException(
+                    "L'alerte " + alerte.id() + " n'est pas DECLENCHEE (statut actuel : " + alerte.statut() + ")");
+        }
+
+        // 4. Le protocole du type de l'alerte doit exister
+        ProtocolDto protocole = protocolRequest.getProtocolByType(alerte.type());
+
+        // 5. Le protocole doit correspondre au type de l'alerte
+        if (protocole.type() == null || !protocole.type().equalsIgnoreCase(alerte.type())) {
+            throw new TransitionInterditeException(
+                    "Le protocole " + protocole.id() + " ne correspond pas au type d'alerte " + alerte.type());
+        }
+
+        // 6. Tout est valide : creation
         intervention.setId(null);
         intervention.setStatut(StatutIntervention.AFFECTEE);
         return interventionRepository.save(intervention);
@@ -82,6 +133,7 @@ public class InterventionService {
         intervention.setStatut(StatutIntervention.CLOTUREE);
         return interventionRepository.save(intervention);
     }
+
     @Transactional
     public Intervention modifierIntervention(Long id, String assistantNom) {
         Intervention intervention = getInterventionById(id);
@@ -91,6 +143,7 @@ public class InterventionService {
         intervention.setAssistantNom(assistantNom);
         return interventionRepository.save(intervention);
     }
+
     @Transactional
     public void supprimerIntervention(Long id) {
         Intervention intervention = getInterventionById(id);

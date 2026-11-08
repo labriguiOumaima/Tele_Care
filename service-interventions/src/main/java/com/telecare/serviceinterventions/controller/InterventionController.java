@@ -1,9 +1,11 @@
 package com.telecare.serviceinterventions.controller;
-import com.telecare.serviceinterventions.dto.InterventionModificationDto;
+
 import com.telecare.serviceinterventions.dto.ArriveeDto;
 import com.telecare.serviceinterventions.dto.CompteRenduDto;
 import com.telecare.serviceinterventions.dto.InterventionCreationDto;
+import com.telecare.serviceinterventions.dto.InterventionDetailDto;
 import com.telecare.serviceinterventions.dto.InterventionDto;
+import com.telecare.serviceinterventions.dto.InterventionModificationDto;
 import com.telecare.serviceinterventions.entite.Intervention;
 import com.telecare.serviceinterventions.entite.StatutIntervention;
 import com.telecare.serviceinterventions.mapper.InterventionMapper;
@@ -41,6 +43,12 @@ public class InterventionController {
         return ResponseEntity.ok(interventionMapper.toDto(interventionService.getInterventionById(id)));
     }
 
+    // Consultation enrichie : intervention + alerte + protocole (via OpenFeign)
+    @GetMapping("/{id}/detail")
+    public ResponseEntity<InterventionDetailDto> getInterventionDetail(@PathVariable Long id) {
+        return ResponseEntity.ok(interventionService.getInterventionDetail(id));
+    }
+
     @PostMapping("/new")
     public ResponseEntity<InterventionDto> creerIntervention(
             @Valid @RequestBody InterventionCreationDto dto) {
@@ -48,6 +56,7 @@ public class InterventionController {
         return ResponseEntity.created(URI.create("/interventions/" + intervention.getId()))
                 .body(interventionMapper.toDto(intervention));
     }
+
     @PutMapping("/{id}")
     public ResponseEntity<InterventionDto> modifierIntervention(
             @PathVariable Long id,
@@ -55,6 +64,7 @@ public class InterventionController {
         return ResponseEntity.ok(interventionMapper.toDto(
                 interventionService.modifierIntervention(id, dto.assistantNom())));
     }
+
     // Le corps est facultatif : sans heure, le service prend l'heure actuelle
     @PutMapping("/{id}/arrivee")
     public ResponseEntity<InterventionDto> enregistrerArrivee(

@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Tele-Care - service-interventions (jalon v1.0)",
-    "description": "Collection Postman de la Personne 3 : CRUD et cycle de vie AFFECTEE > SUR_PLACE > CLOTUREE. Lancer le service sur le port 8083 puis executer avec le Collection Runner.",
+    "name": "Tele-Care - service-interventions",
+    "description": "CRUD et cycle de vie AFFECTEE > SUR_PLACE > CLOTUREE, communication OpenFeign avec service-alertes (creation controlee et consultation enrichie). Demarrer Eureka, le Config Server et service-alertes, puis le service sur le port 8083, et executer avec le Collection Runner.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -72,7 +72,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.collectionVariables.set(\"alertId\", Math.floor(Math.random() * 900000) + 100000);"
+                  "pm.collectionVariables.set(\"alertId\", Math.floor(Math.random() * 9000) + 1000);"
                 ]
               }
             },
@@ -741,7 +741,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.collectionVariables.set(\"alertId2\", Math.floor(Math.random() * 900000) + 100000);"
+                  "pm.collectionVariables.set(\"alertId2\", Math.floor(Math.random() * 9000) + 1000);"
                 ]
               }
             },
@@ -1183,6 +1183,288 @@
               "path": [
                 "interventions",
                 "{{interventionId2}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5 - Communication OpenFeign (creation controlee et consultation enrichie)",
+      "item": [
+        {
+          "name": "5.1 Creation : alerte introuvable (404)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/new",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "new"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alertId\": 999999,\n  \"assistantNom\": \"Test Feign\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Message attendu\", function () { pm.expect(pm.response.text()).to.include(\"Ressource externe introuvable\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.2 Creation : alerte non DECLENCHEE (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/new",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "new"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alertId\": 20,\n  \"assistantNom\": \"Test Feign\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 409\", function () { pm.response.to.have.status(409); });",
+                  "pm.test(\"Message attendu\", function () { pm.expect(pm.response.text()).to.include(\"n'est pas DECLENCHEE\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.3 Creation : protocole introuvable (404)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/new",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "new"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alertId\": 30,\n  \"assistantNom\": \"Test Feign\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Message attendu\", function () { pm.expect(pm.response.text()).to.include(\"Ressource externe introuvable\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.4 Creation : protocole incompatible (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/new",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "new"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alertId\": 40,\n  \"assistantNom\": \"Test Feign\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 409\", function () { pm.response.to.have.status(409); });",
+                  "pm.test(\"Message attendu\", function () { pm.expect(pm.response.text()).to.include(\"ne correspond pas\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.5 Creation : erreur du service distant (502)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/new",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "new"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alertId\": 60,\n  \"assistantNom\": \"Test Feign\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 502\", function () { pm.response.to.have.status(502); });",
+                  "pm.test(\"Message attendu\", function () { pm.expect(pm.response.text()).to.include(\"Erreur HTTP du service distant\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.6 Consultation enrichie (200)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionId}}/detail",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionId}}",
+                "detail"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"Donnees de l intervention\", function () { pm.expect(j.id).to.eql(pm.collectionVariables.get(\"interventionId\")); });",
+                  "pm.test(\"Donnees de l alerte (Feign)\", function () { pm.expect(j.alerteType).to.eql(\"CHUTE\"); pm.expect(j.alerteGravite).to.eql(\"HAUTE\"); });",
+                  "pm.test(\"Donnees du protocole (Feign)\", function () { pm.expect(j.protocoleEtapes).to.not.be.null; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.7 Consultation enrichie : intervention inexistante (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/999999/detail",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "999999",
+                "detail"
               ]
             }
           },

@@ -7,7 +7,7 @@ Il gère la **prise en charge terrain** d'une urgence : affectation d'un assista
 |---|---|
 | **Port** | 8083 |
 | **Base de données** | H2 en mémoire (`interventionsdb`), propre au service |
-| **Jalon livré** | **v3.0** — Configuration centralisée : ce service lit sa configuration depuis le Config Server (après v1.0 : services métier, v2.0 : client Eureka) |
+| **Jalon livré** | **v4.0** — Communication synchrone (OpenFeign) : vérification des références distantes à la création et consultation enrichie (après v1.0 : services métier, v2.0 : client Eureka, v3.0 : Config Server) |
 
 ---
 
@@ -18,10 +18,11 @@ Il gère la **prise en charge terrain** d'une urgence : affectation d'un assista
 | Java (JDK) | 17 |
 | Maven | Non requis, le wrapper `mvnw` est fourni |
 | Spring Boot | 3.5.6 |
-| Spring Cloud (BOM) | 2025.0.0 (clients Eureka et Config) |
+| Spring Cloud (BOM) | 2025.0.0 (clients Eureka, Config et OpenFeign) |
 | Postman | Pour rejouer la collection de tests |
 | Serveur Eureka | Port 8761. Sans lui, le service démarre quand même (avertissements de connexion dans la console) |
 | Config Server | Port 8888. **Sans lui, le service refuse de démarrer** (comportement voulu, voir 5.2) |
+| service-alertes | Port 8082, appelé par OpenFeign (voir 5.3). Sans lui, la création et la consultation enrichie répondent `503` |
 
 ## 2. Architecture du service
 
@@ -30,6 +31,8 @@ flowchart LR
     Client["Client / Postman"] --> C["InterventionController<br/>/interventions"]
     C --> S["InterventionService<br/>règles métier"]
     S --> R["InterventionRepository"]
+    S --> F["Clients OpenFeign<br/>AlerteRequest, ProtocolRequest"]
+    F --> A["service-alertes<br/>(découvert par Eureka)"]
     R --> DB[("Base interventionsdb<br/>H2")]
 ```
 
@@ -42,9 +45,12 @@ src/main/java/com/telecare/serviceinterventions
 ├── service      InterventionService
 ├── repository   InterventionRepository
 ├── entite       Intervention, StatutIntervention
-├── dto          InterventionCreationDto, ArriveeDto, CompteRenduDto, InterventionDto
+├── dto          InterventionCreationDto, InterventionModificationDto, ArriveeDto, CompteRenduDto,
+│                InterventionDto, InterventionDetailDto
+├── feignClient  AlerteRequest, ProtocolRequest, AlerteDto, ProtocolDto
 ├── mapper       InterventionMapper
-└── exception    RessourceIntrouvableException, TransitionInterditeException, InterventionExistanteException
+└── exception    RessourceIntrouvableException, TransitionInterditeException, InterventionExistanteException,
+                 GlobalExceptionHandler
 ```
 
 ## 3. Modèle de données
@@ -83,14 +89,15 @@ AFFECTEE  ──(arrivée enregistrée)──▶  SUR_PLACE  ──(compte-rendu
 |---|---|---|---|
 | `GET` | `/interventions` | Lister (filtre optionnel `?statut=SUR_PLACE`) | `200` |
 | `GET` | `/interventions/{id}` | Consulter une intervention | `200` |
-| `POST` | `/interventions/new` | Créer une intervention | `201` + `Location` |
+| `GET` | `/interventions/{id}/detail` | Consultation enrichie : intervention, alerte et protocole (OpenFeign) | `200` |
+| `POST` | `/interventions/new` | Créer une intervention, après vérification de l'alerte et de son protocole | `201` + `Location` |
 | `PUT` | `/interventions/{id}` | Modifier l'assistant affecté (interdit si `CLOTUREE`) | `200` |
 | `PUT` | `/interventions/{id}/arrivee` | Enregistrer l'heure d'arrivée (corps facultatif, heure actuelle par défaut) | `200` |
 | `PUT` | `/interventions/{id}/compte-rendu` | Rédiger le compte-rendu | `200` |
 | `PUT` | `/interventions/{id}/cloture` | Clôturer l'intervention | `200` |
 | `DELETE` | `/interventions/{id}` | Supprimer une intervention | `204` |
 
-**Codes d'erreur** : `400` données invalides (validation) · `404` ressource inexistante · `409` transition de statut interdite ou doublon d'`alertId`.
+**Codes d'erreur** : `400` données invalides (validation) · `404` ressource inexistante (locale ou distante) · `409` transition de statut interdite, doublon d'`alertId` ou refus métier · `502` erreur HTTP du service distant · `503` service distant indisponible.
 
 Exemple de création :
 
@@ -104,7 +111,7 @@ POST /interventions/new
 
 ## 5. Lancer le service
 
-**Ordre de démarrage** : Eureka (8761), puis Config Server (8888), puis ce service (8083).
+**Ordre de démarrage** : Eureka (8761), Config Server (8888), service-alertes (8082), puis ce service (8083).
 
 Depuis le dossier `service-interventions` :
 
@@ -162,15 +169,58 @@ La dépendance `spring-cloud-starter-config` est ajoutée au `pom.xml`.
 
 **Vérification** : ouvrir <http://localhost:8888/service-interventions/default>. La réponse doit contenir `server.port` à `8083`, `spring.datasource.url` à `jdbc:h2:mem:interventionsdb` et les propriétés Eureka. Le service démarre ensuite sans configuration locale, s'enregistre dans Eureka (`UP`), et la collection Postman reste à 42 tests réussis.
 
+### 5.3 Communication synchrone avec OpenFeign (jalon v4.0)
+
+Le service appelle `service-alertes` grâce à deux clients OpenFeign typés (`AlerteRequest`, `ProtocolRequest`). L'adresse n'est pas écrite en dur : le client utilise le nom `service-alertes` découvert par Eureka (`@EnableFeignClients`, avec `spring-cloud-starter-openfeign` et `spring-cloud-starter-loadbalancer`).
+
+| Client | Appel | DTO de réponse |
+|---|---|---|
+| `AlerteRequest` | `GET /alertes/{id}` | `AlerteDto` (id, beneficiaryId, type, gravite, dateDeclenchement, statut) |
+| `ProtocolRequest` | `GET /protocoles/type/{type}` | `ProtocolDto` (id, type, etapes, niveauPriorite) |
+
+**Création contrôlée** (`POST /interventions/new`), dans cet ordre :
+
+| # | Contrôle | En cas d'échec |
+|---|---|---|
+| 1 | Aucune intervention n'existe déjà pour cet `alertId` (**idempotence**, avant tout appel externe) | `409` |
+| 2 | L'alerte existe | `404` « Ressource externe introuvable » |
+| 3 | L'alerte est `DECLENCHEE` | `409` |
+| 4 | Le protocole du type de l'alerte existe | `404` « Ressource externe introuvable » |
+| 5 | Le type du protocole correspond au type de l'alerte | `409` |
+| 6 | Création, statut `AFFECTEE` | `201` |
+
+**Idempotence** : l'`alertId` sert de clé. Il est unique en base, et sa présence est vérifiée avant tout appel externe : une même alerte ne peut donner lieu qu'à une seule intervention.
+
+**Gestion des erreurs de communication** (`GlobalExceptionHandler`) :
+
+| Situation | Réponse |
+|---|---|
+| Ressource introuvable chez le service distant | `404` « Ressource externe introuvable » |
+| Échec de communication (connexion impossible, délai dépassé) | `503` « Échec de communication avec un service » |
+| Service ou instance indisponible | `503` « Service ou instance indisponible » |
+| Autre erreur HTTP du service distant | `502` « Erreur HTTP du service distant : [statut] » |
+
+**Consultation enrichie** : `GET /interventions/{id}/detail` assemble les données de l'intervention (base locale) et celles de l'alerte et de son protocole (OpenFeign) :
+
+```json
+{
+  "id": 1, "alertId": 1000, "assistantNom": "Karim Benali",
+  "heureArrivee": null, "compteRendu": null, "statut": "AFFECTEE",
+  "alerteType": "CHUTE", "alerteGravite": "HAUTE", "alerteStatut": "DECLENCHEE",
+  "protocoleEtapes": "1. Appeler les secours 2. Securiser la personne 3. Prevenir la famille",
+  "protocoleNiveauPriorite": 1
+}
+```
+
 ## 6. Tests
 
 La collection Postman est dans [`postman/service-interventions.postman_collection.json`](postman/service-interventions.postman_collection.json).
 
-1. Démarrer le service (port 8083).
+1. Démarrer Eureka, le Config Server et `service-alertes` (ou une simulation exposant les mêmes adresses), puis le service (port 8083).
 2. Dans Postman : **Import** puis choisir le fichier de la collection.
 3. Clic droit sur la collection → **Run collection**.
 
-**31 requêtes, 42 tests automatiques, tous réussis.**
+**38 requêtes, 57 tests automatiques, tous réussis.**
 
 | Dossier | Couverture |
 |---|---|
@@ -178,6 +228,9 @@ La collection Postman est dans [`postman/service-interventions.postman_collectio
 | 2 — Erreurs de validation | Corps invalide, JSON cassé, statut inconnu, `assistantNom` vide (`400`) |
 | 3 — Ressources inexistantes | Identifiant inexistant sur chaque endpoint (`404`) |
 | 4 — Règles métier | Doublon, clôture avant arrivée, double arrivée, modification ou suppression d'une intervention clôturée (`409`), suppression valide (`204`) |
+| 5 — OpenFeign | Alerte introuvable (`404`), alerte non déclenchée (`409`), protocole introuvable (`404`), protocole incompatible (`409`), erreur du service distant (`502`), consultation enrichie (`200`) et intervention inexistante (`404`) |
+
+Les tests du dossier 5 ont été réalisés avec une simulation de `service-alertes`. Un test manuel complète la collection : `service-alertes` arrêté, `POST /interventions/new` répond `503` « Service ou instance indisponible ».
 
 ## 7. Avancement par jalon
 
@@ -186,3 +239,4 @@ La collection Postman est dans [`postman/service-interventions.postman_collectio
 | **v1.0** | Couches Controller / Service / Repository, DTO validés, base propre, API REST, gestion des erreurs, tests Postman | **Terminé** |
 | **v2.0** | Client Eureka : enregistrement du service dans Eureka (statut `UP`) | **Terminé** |
 | **v3.0** | Configuration centralisée : fichier dans `config-repo`, service client du Config Server | **Terminé** |
+| **v4.0** | Communication synchrone : clients OpenFeign, création contrôlée, consultation enrichie, gestion des erreurs de communication | **Terminé** |
