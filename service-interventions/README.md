@@ -7,7 +7,7 @@ Il gère la **prise en charge terrain** d'une urgence : affectation d'un assista
 |---|---|
 | **Port** | 8083 |
 | **Base de données** | H2 en mémoire (`interventionsdb`), propre au service |
-| **Jalon livré** | **v4.0** — Communication synchrone (OpenFeign) : vérification des références distantes à la création et consultation enrichie (après v1.0 : services métier, v2.0 : client Eureka, v3.0 : Config Server) |
+| **Jalon livré** | **v5.0** — Communication asynchrone (Kafka) : publication de `intervention-assigned` et `emergency-resolved`, consommation de `alert-triggered` (après v1.0 : services métier, v2.0 : client Eureka, v3.0 : Config Server, v4.0 : OpenFeign) |
 
 ---
 
@@ -23,6 +23,7 @@ Il gère la **prise en charge terrain** d'une urgence : affectation d'un assista
 | Serveur Eureka | Port 8761. Sans lui, le service démarre quand même (avertissements de connexion dans la console) |
 | Config Server | Port 8888. **Sans lui, le service refuse de démarrer** (comportement voulu, voir 5.2) |
 | service-alertes | Port 8082, appelé par OpenFeign (voir 5.3). Sans lui, la création et la consultation enrichie répondent `503` |
+| Kafka | Conteneur Docker, port 9092, avec les topics `alert-triggered`, `intervention-assigned` et `emergency-resolved` (voir 5.4). Sans lui, la publication des événements échoue (erreur journalisée, l'intervention reste enregistrée) |
 
 ## 2. Architecture du service
 
@@ -167,7 +168,7 @@ spring.config.import=configserver:http://localhost:8888
 
 La dépendance `spring-cloud-starter-config` est ajoutée au `pom.xml`.
 
-**Vérification** : ouvrir <http://localhost:8888/service-interventions/default>. La réponse doit contenir `server.port` à `8083`, `spring.datasource.url` à `jdbc:h2:mem:interventionsdb` et les propriétés Eureka. Le service démarre ensuite sans configuration locale, s'enregistre dans Eureka (`UP`), et la collection Postman reste à 42 tests réussis.
+**Vérification** : ouvrir <http://localhost:8888/service-interventions/default>. La réponse doit contenir `server.port` à `8083`, `spring.datasource.url` à `jdbc:h2:mem:interventionsdb` et les propriétés Eureka. Le service démarre ensuite sans configuration locale, s'enregistre dans Eureka (`UP`), et les tests Postman restent réussis (voir section 6).
 
 ### 5.3 Communication synchrone avec OpenFeign (jalon v4.0)
 
@@ -212,6 +213,71 @@ Le service appelle `service-alertes` grâce à deux clients OpenFeign typés (`A
 }
 ```
 
+### 5.4 Communication asynchrone avec Kafka (jalon v5.0)
+
+Le service échange des événements JSON avec Kafka (port 9092). La configuration Kafka est dans `config-repo/service-interventions.properties`.
+
+| Topic | Sens | Rôle |
+|---|---|---|
+| `alert-triggered` | Reçu | Création d'une intervention liée à `alertId`, avec un assistant d'astreinte pris dans une liste fictive |
+| `intervention-assigned` | Publié | Après l'affectation de l'assistant |
+| `emergency-resolved` | Publié | Après la clôture de l'intervention |
+
+**Formats des messages** (JSON, clé du message Kafka = `alertId`) :
+
+```json
+alert-triggered (reçu) :
+{ "alertId": 1000, "beneficiaryId": 1, "type": "CHUTE", "gravite": "HAUTE", "dateDeclenchement": "2026-11-09T10:15:30" }
+
+intervention-assigned (publié) :
+{ "eventId": "<uuid>", "interventionId": 1, "alertId": 1000, "beneficiaryId": 1, "assistantNom": "Karim Benali", "dateAffectation": "2026-11-09T10:15:32" }
+
+emergency-resolved (publié) :
+{ "eventId": "<uuid>", "interventionId": 1, "alertId": 1000, "beneficiaryId": 1, "compteRendu": "...", "dateCloture": "2026-11-09T11:02:10" }
+```
+
+Seul `alertId` est indispensable dans le message reçu ; les champs inconnus sont ignorés.
+
+**Règles de traitement**
+
+| Règle | Détail |
+|---|---|
+| Publication après commit | Le message est envoyé seulement une fois la transaction validée |
+| Échec de publication | L'intervention reste enregistrée, l'erreur est journalisée |
+| Idempotence | Un `alert-triggered` reçu deux fois ne crée qu'une intervention |
+| Message invalide | Illisible ou sans `alertId` : ignoré et journalisé |
+| Réessais | 3 tentatives au maximum, 2 secondes d'attente. Aucun réessai si l'alerte n'est pas `DECLENCHEE` ou si le protocole est incompatible |
+
+**Éléments ajoutés** : champ `beneficiaryId` dans l'entité `Intervention` (copié depuis l'alerte à la création), packages `event` (3 événements), `messaging` (`InterventionEventPublisher`, `AlertTriggeredConsumer`) et `config` (`KafkaConfig`), et service `AssistantAstreinteService`.
+
+**Commandes Docker** (une à la fois, PowerShell) :
+
+```powershell
+docker run -d --name kafka -p 9092:9092 apache/kafka:3.9.0
+```
+
+```powershell
+docker exec kafka /opt/kafka/bin/kafka-topics.sh --create --topic alert-triggered --bootstrap-server localhost:9092
+```
+
+Répéter la commande de création pour `intervention-assigned` et `emergency-resolved`.
+
+**Observer les messages publiés** :
+
+```powershell
+docker exec kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic emergency-resolved --from-beginning
+```
+
+Même commande avec `--topic intervention-assigned` pour l'autre événement.
+
+**Envoyer un `alert-triggered` de test** (format `clé:valeur`) :
+
+```powershell
+docker exec -it kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server localhost:9092 --topic alert-triggered --property parse.key=true --property key.separator=:
+```
+
+Puis saisir : `5001:{"alertId":5001,"beneficiaryId":1,"type":"CHUTE","gravite":"HAUTE"}`. Le renvoyer une deuxième fois : une seule intervention existe pour cet `alertId`.
+
 ## 6. Tests
 
 La collection Postman est dans [`postman/service-interventions.postman_collection.json`](postman/service-interventions.postman_collection.json).
@@ -220,7 +286,7 @@ La collection Postman est dans [`postman/service-interventions.postman_collectio
 2. Dans Postman : **Import** puis choisir le fichier de la collection.
 3. Clic droit sur la collection → **Run collection**.
 
-**38 requêtes, 57 tests automatiques, tous réussis.**
+**46 requêtes, 77 tests automatiques, tous réussis.**
 
 | Dossier | Couverture |
 |---|---|
@@ -229,8 +295,11 @@ La collection Postman est dans [`postman/service-interventions.postman_collectio
 | 3 — Ressources inexistantes | Identifiant inexistant sur chaque endpoint (`404`) |
 | 4 — Règles métier | Doublon, clôture avant arrivée, double arrivée, modification ou suppression d'une intervention clôturée (`409`), suppression valide (`204`) |
 | 5 — OpenFeign | Alerte introuvable (`404`), alerte non déclenchée (`409`), protocole introuvable (`404`), protocole incompatible (`409`), erreur du service distant (`502`), consultation enrichie (`200`) et intervention inexistante (`404`) |
+| 6 — Kafka | Création (`201`), arrivée, compte-rendu et clôture (`200`), puis échecs sans publication : clôture déjà effectuée, doublon d'`alertId`, alerte non déclenchée (`409`), et intervention créée par `alert-triggered` une seule fois |
 
 Les tests du dossier 5 ont été réalisés avec une simulation de `service-alertes`. Un test manuel complète la collection : `service-alertes` arrêté, `POST /interventions/new` répond `503` « Service ou instance indisponible ».
+
+Le contenu des messages Kafka se vérifie avec le consommateur console (voir 5.4), pas avec Postman. Avant la requête 6.8, envoyer deux fois le message `alert-triggered` de l'`alertId` 5001 avec le producteur console.
 
 ## 7. Avancement par jalon
 
@@ -240,3 +309,4 @@ Les tests du dossier 5 ont été réalisés avec une simulation de `service-aler
 | **v2.0** | Client Eureka : enregistrement du service dans Eureka (statut `UP`) | **Terminé** |
 | **v3.0** | Configuration centralisée : fichier dans `config-repo`, service client du Config Server | **Terminé** |
 | **v4.0** | Communication synchrone : clients OpenFeign, création contrôlée, consultation enrichie, gestion des erreurs de communication | **Terminé** |
+| **v5.0** | Communication asynchrone (Kafka) : publication de `intervention-assigned` et `emergency-resolved`, consommation de `alert-triggered`, idempotence, réessais limités | **Terminé** |

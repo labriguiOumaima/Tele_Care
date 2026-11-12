@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Tele-Care - service-interventions",
-    "description": "CRUD et cycle de vie AFFECTEE > SUR_PLACE > CLOTUREE, communication OpenFeign avec service-alertes (creation controlee et consultation enrichie). Demarrer Eureka, le Config Server et service-alertes, puis le service sur le port 8083, et executer avec le Collection Runner.",
+    "description": "CRUD et cycle de vie AFFECTEE > SUR_PLACE > CLOTUREE, communication OpenFeign avec service-alertes (creation controlee et consultation enrichie). Demarrer Eureka, le Config Server et service-alertes, puis le service sur le port 8083, et executer avec le Collection Runner. Jalon v5.0 : dossier 6 (Kafka).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -1481,6 +1481,337 @@
           ]
         }
       ]
+    },
+    {
+      "name": "6 - Communication asynchrone Kafka (jalon v5.0)",
+      "description": "Publication de intervention-assigned et emergency-resolved apres commit, echecs sans publication, consommation de alert-triggered. Le contenu des messages se verifie avec la console Kafka.",
+      "item": [
+        {
+          "name": "6.1 Creation valide : publie intervention-assigned (201)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/new",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "new"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alertId\": {{alertIdKafka}},\n  \"assistantNom\": \"Karim Benali\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Verifier ensuite le message dans le consommateur console Kafka (topic intervention-assigned)."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"alertIdKafka\", Math.floor(Math.random() * 3999) + 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "var j = pm.response.json();",
+                  "pm.collectionVariables.set(\"interventionIdKafka\", j.id);",
+                  "pm.test(\"statut = AFFECTEE\", function () { pm.expect(j.statut).to.eql(\"AFFECTEE\"); });",
+                  "pm.test(\"alertId conserve\", function () { pm.expect(j.alertId).to.eql(pm.collectionVariables.get(\"alertIdKafka\")); });",
+                  "pm.test(\"Reponse immediate sans attendre Kafka\", function () { pm.expect(pm.response.responseTime).to.be.below(5000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.2 Enregistrer l'arrivee (200)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionIdKafka}}/arrivee",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionIdKafka}}",
+                "arrivee"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"statut = SUR_PLACE\", function () { pm.expect(pm.response.json().statut).to.eql(\"SUR_PLACE\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.3 Rediger le compte-rendu (200)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionIdKafka}}/compte-rendu",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionIdKafka}}",
+                "compte-rendu"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"compteRendu\": \"Chute sans gravite, personne relevee et rassuree. Contact prevenu.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"compteRendu enregistre\", function () { pm.expect(pm.response.json().compteRendu).to.include(\"Chute\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.4 Cloturer : publie emergency-resolved (200)",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionIdKafka}}/cloture",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionIdKafka}}",
+                "cloture"
+              ]
+            },
+            "description": "Verifier ensuite le message dans le consommateur console Kafka (topic emergency-resolved)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"statut = CLOTUREE\", function () { pm.expect(pm.response.json().statut).to.eql(\"CLOTUREE\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.5 Echec : cloture deja effectuee (409, rien n'est publie)",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionIdKafka}}/cloture",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionIdKafka}}",
+                "cloture"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.6 Echec : doublon d'alertId (409, rien n'est publie)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/new",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "new"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alertId\": {{alertIdKafka}},\n  \"assistantNom\": \"Nadia Alaoui\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 409\", function () { pm.response.to.have.status(409); });",
+                  "pm.test(\"Une seule intervention par alerte\", function () { pm.expect(pm.response.text()).to.include(String(pm.collectionVariables.get(\"alertIdKafka\"))); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.7 Echec : alerte non DECLENCHEE (409, rien n'est publie)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/new",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "new"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alertId\": 20,\n  \"assistantNom\": \"Test Kafka\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 409\", function () { pm.response.to.have.status(409); });",
+                  "pm.test(\"Message attendu\", function () { pm.expect(pm.response.text()).to.include(\"n'est pas DECLENCHEE\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6.8 Intervention creee par alert-triggered (une seule, idempotence)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions"
+              ]
+            },
+            "description": "A lancer APRES avoir envoye deux fois le message alert-triggered (alertId 5001) avec la console Kafka. Service redemarre avant le test (base H2 en memoire)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var liste = pm.response.json();",
+                  "var trouvees = liste.filter(function (i) { return i.alertId === 5001; });",
+                  "pm.test(\"Intervention creee pour l alerte 5001 par le consommateur\", function () { pm.expect(trouvees.length).to.be.above(0); });",
+                  "pm.test(\"Une seule intervention meme si le message est recu deux fois\", function () { pm.expect(trouvees.length).to.eql(1); });",
+                  "pm.test(\"Statut AFFECTEE\", function () { pm.expect(trouvees[0].statut).to.eql(\"AFFECTEE\"); });",
+                  "pm.test(\"Assistant pris dans la liste fictive\", function () { pm.expect([\"Karim Benali\",\"Nadia Alaoui\",\"Youssef Tazi\",\"Salma Idrissi\"]).to.include(trouvees[0].assistantNom); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "variable": [
@@ -1502,6 +1833,14 @@
     },
     {
       "key": "interventionId2",
+      "value": ""
+    },
+    {
+      "key": "alertIdKafka",
+      "value": ""
+    },
+    {
+      "key": "interventionIdKafka",
       "value": ""
     }
   ]
