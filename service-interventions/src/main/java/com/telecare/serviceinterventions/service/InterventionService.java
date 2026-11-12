@@ -3,6 +3,8 @@ package com.telecare.serviceinterventions.service;
 import com.telecare.serviceinterventions.dto.InterventionDetailDto;
 import com.telecare.serviceinterventions.entite.Intervention;
 import com.telecare.serviceinterventions.entite.StatutIntervention;
+import com.telecare.serviceinterventions.event.InterventionAssignedEvent;
+import com.telecare.serviceinterventions.event.EmergencyResolvedEvent;
 import com.telecare.serviceinterventions.exception.InterventionExistanteException;
 import com.telecare.serviceinterventions.exception.RessourceIntrouvableException;
 import com.telecare.serviceinterventions.exception.TransitionInterditeException;
@@ -10,12 +12,16 @@ import com.telecare.serviceinterventions.feignClient.AlerteDto;
 import com.telecare.serviceinterventions.feignClient.AlerteRequest;
 import com.telecare.serviceinterventions.feignClient.ProtocolDto;
 import com.telecare.serviceinterventions.feignClient.ProtocolRequest;
+import com.telecare.serviceinterventions.messaging.InterventionEventPublisher;
 import com.telecare.serviceinterventions.repository.InterventionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class InterventionService {
@@ -23,13 +29,16 @@ public class InterventionService {
     private final InterventionRepository interventionRepository;
     private final AlerteRequest alerteRequest;
     private final ProtocolRequest protocolRequest;
+    private final InterventionEventPublisher eventPublisher;
 
     public InterventionService(InterventionRepository interventionRepository,
                                AlerteRequest alerteRequest,
-                               ProtocolRequest protocolRequest) {
+                               ProtocolRequest protocolRequest,
+                               InterventionEventPublisher eventPublisher) {
         this.interventionRepository = interventionRepository;
         this.alerteRequest = alerteRequest;
         this.protocolRequest = protocolRequest;
+        this.eventPublisher = eventPublisher;
     }
 
     public List<Intervention> getAllInterventions(StatutIntervention statut) {
@@ -90,8 +99,21 @@ public class InterventionService {
 
         // 6. Tout est valide : creation
         intervention.setId(null);
+        intervention.setBeneficiaryId(alerte.beneficiaryId());
         intervention.setStatut(StatutIntervention.AFFECTEE);
-        return interventionRepository.save(intervention);
+        Intervention enregistree = interventionRepository.save(intervention);
+
+        // 7. Publication de intervention-assigned APRES le commit en base
+        InterventionAssignedEvent event = new InterventionAssignedEvent(
+                UUID.randomUUID().toString(),
+                enregistree.getId(),
+                enregistree.getAlertId(),
+                enregistree.getBeneficiaryId(),
+                enregistree.getAssistantNom(),
+                LocalDateTime.now());
+        apresCommit(() -> eventPublisher.publierAffectation(event));
+
+        return enregistree;
     }
 
     @Transactional
@@ -131,9 +153,20 @@ public class InterventionService {
             throw new TransitionInterditeException("Le compte-rendu doit etre redige avant la cloture");
         }
         intervention.setStatut(StatutIntervention.CLOTUREE);
-        return interventionRepository.save(intervention);
-    }
+        Intervention enregistree = interventionRepository.save(intervention);
 
+        // Publication de emergency-resolved APRES le commit en base
+        EmergencyResolvedEvent event = new EmergencyResolvedEvent(
+                UUID.randomUUID().toString(),
+                enregistree.getId(),
+                enregistree.getAlertId(),
+                enregistree.getBeneficiaryId(),
+                enregistree.getCompteRendu(),
+                LocalDateTime.now());
+        apresCommit(() -> eventPublisher.publierCloture(event));
+
+        return enregistree;
+    }
     @Transactional
     public Intervention modifierIntervention(Long id, String assistantNom) {
         Intervention intervention = getInterventionById(id);
@@ -151,5 +184,19 @@ public class InterventionService {
             throw new TransitionInterditeException("Une intervention CLOTUREE ne peut pas etre supprimee");
         }
         interventionRepository.delete(intervention);
+    }
+
+    // Execute l'action seulement si la transaction est validee (commit)
+    private void apresCommit(Runnable action) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    action.run();
+                }
+            });
+        } else {
+            action.run();
+        }
     }
 }

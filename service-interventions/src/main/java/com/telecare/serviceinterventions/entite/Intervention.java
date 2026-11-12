@@ -14,7 +14,8 @@ public class Intervention {
     // Référence distante vers l'alerte (service-alertes) : pas de clé étrangère
     @Column(nullable = false, unique = true)
     private Long alertId;
-
+    // Référence distante vers le bénéficiaire (service-beneficiaires) : copiée depuis l'alerte
+    private Long beneficiaryId;
     @Column(nullable = false)
     private String assistantNom;
 
@@ -35,7 +36,8 @@ public class Intervention {
 
     public Long getAlertId() { return alertId; }
     public void setAlertId(Long alertId) { this.alertId = alertId; }
-
+    public Long getBeneficiaryId() { return beneficiaryId; }
+    public void setBeneficiaryId(Long beneficiaryId) { this.beneficiaryId = beneficiaryId; }
     public String getAssistantNom() { return assistantNom; }
     public void setAssistantNom(String assistantNom) { this.assistantNom = assistantNom; }
 
