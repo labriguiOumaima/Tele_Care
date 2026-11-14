@@ -9,11 +9,12 @@ import com.telecare.serviceinterventions.exception.InterventionExistanteExceptio
 import com.telecare.serviceinterventions.exception.RessourceIntrouvableException;
 import com.telecare.serviceinterventions.exception.TransitionInterditeException;
 import com.telecare.serviceinterventions.feignClient.AlerteDto;
-import com.telecare.serviceinterventions.feignClient.AlerteRequest;
 import com.telecare.serviceinterventions.feignClient.ProtocolDto;
-import com.telecare.serviceinterventions.feignClient.ProtocolRequest;
+import com.telecare.serviceinterventions.feignClient.ResilientRequests;
 import com.telecare.serviceinterventions.messaging.InterventionEventPublisher;
 import com.telecare.serviceinterventions.repository.InterventionRepository;
+import io.github.resilience4j.ratelimiter.RequestNotPermitted;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -27,17 +28,14 @@ import java.util.UUID;
 public class InterventionService {
 
     private final InterventionRepository interventionRepository;
-    private final AlerteRequest alerteRequest;
-    private final ProtocolRequest protocolRequest;
+    private final ResilientRequests resilientRequests;
     private final InterventionEventPublisher eventPublisher;
 
     public InterventionService(InterventionRepository interventionRepository,
-                               AlerteRequest alerteRequest,
-                               ProtocolRequest protocolRequest,
+                               ResilientRequests resilientRequests,
                                InterventionEventPublisher eventPublisher) {
         this.interventionRepository = interventionRepository;
-        this.alerteRequest = alerteRequest;
-        this.protocolRequest = protocolRequest;
+        this.resilientRequests = resilientRequests;
         this.eventPublisher = eventPublisher;
     }
 
@@ -53,11 +51,22 @@ public class InterventionService {
                 .orElseThrow(() -> new RessourceIntrouvableException("Intervention introuvable : " + id));
     }
 
+    @RateLimiter(name = "consultation", fallbackMethod = "consultationLimitee")
     @Transactional(readOnly = true)
     public InterventionDetailDto getInterventionDetail(Long id) {
         Intervention intervention = getInterventionById(id);
-        AlerteDto alerte = alerteRequest.getAlerteById(intervention.getAlertId());
-        ProtocolDto protocole = protocolRequest.getProtocolByType(alerte.type());
+        // Methode tolerante (cache ou objet vide) via ResilientRequests
+        AlerteDto alerte = resilientRequests.getAlerteByIdFb(intervention.getAlertId());
+
+        String typeAlerte = alerte != null ? alerte.type() : null;
+        String graviteAlerte = alerte != null ? alerte.gravite() : null;
+        String statutAlerte = alerte != null ? alerte.statut() : null;
+
+        // Methode tolerante pour le protocole : null si le service est indisponible
+        ProtocolDto protocole = typeAlerte != null
+                ? resilientRequests.getProtocolByTypeFb(typeAlerte)
+                : null;
+
         return new InterventionDetailDto(
                 intervention.getId(),
                 intervention.getAlertId(),
@@ -65,11 +74,28 @@ public class InterventionService {
                 intervention.getHeureArrivee(),
                 intervention.getCompteRendu(),
                 intervention.getStatut(),
-                alerte.type(),
-                alerte.gravite(),
-                alerte.statut(),
-                protocole.etapes(),
-                protocole.niveauPriorite());
+                typeAlerte,
+                graviteAlerte,
+                statutAlerte,
+                protocole != null ? protocole.etapes() : null,
+                protocole != null ? protocole.niveauPriorite() : null);
+    }
+
+    // Repli du RateLimiter : donnees locales seulement, sans appel Feign
+    public InterventionDetailDto consultationLimitee(Long id, RequestNotPermitted cause) {
+        Intervention intervention = getInterventionById(id);
+        return new InterventionDetailDto(
+                intervention.getId(),
+                intervention.getAlertId(),
+                intervention.getAssistantNom(),
+                intervention.getHeureArrivee(),
+                intervention.getCompteRendu(),
+                intervention.getStatut(),
+                null,   // typeAlerte
+                null,   // graviteAlerte
+                null,   // statutAlerte
+                null,   // etapes du protocole
+                null);  // niveauPriorite
     }
 
     @Transactional
@@ -80,16 +106,16 @@ public class InterventionService {
         }
 
         // 2. L'alerte doit exister chez service-alertes (404 si introuvable, 503 si injoignable)
-        AlerteDto alerte = alerteRequest.getAlerteById(intervention.getAlertId());
+        AlerteDto alerte = resilientRequests.getAlerteByIdStrict(intervention.getAlertId());
 
-        // 3. L'alerte doit etre DECLENCHEE (sinon elle est deja prise en charge ou resolue)
+        // 3. L'alerte doit etre DECLENCHEE
         if (!"DECLENCHEE".equals(alerte.statut())) {
             throw new TransitionInterditeException(
                     "L'alerte " + alerte.id() + " n'est pas DECLENCHEE (statut actuel : " + alerte.statut() + ")");
         }
 
-        // 4. Le protocole du type de l'alerte doit exister
-        ProtocolDto protocole = protocolRequest.getProtocolByType(alerte.type());
+        // 4. Le protocole du type de l'alerte doit exister (404 si introuvable, 503 si injoignable)
+        ProtocolDto protocole = resilientRequests.getProtocolByTypeStrict(alerte.type());
 
         // 5. Le protocole doit correspondre au type de l'alerte
         if (protocole.type() == null || !protocole.type().equalsIgnoreCase(alerte.type())) {
@@ -167,6 +193,7 @@ public class InterventionService {
 
         return enregistree;
     }
+
     @Transactional
     public Intervention modifierIntervention(Long id, String assistantNom) {
         Intervention intervention = getInterventionById(id);
