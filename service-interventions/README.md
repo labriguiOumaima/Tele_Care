@@ -7,7 +7,7 @@ Il gère la **prise en charge terrain** d'une urgence : affectation d'un assista
 |---|---|
 | **Port** | 8083 |
 | **Base de données** | H2 en mémoire (`interventionsdb`), propre au service |
-| **Jalon livré** | **v5.0** — Communication asynchrone (Kafka) : publication de `intervention-assigned` et `emergency-resolved`, consommation de `alert-triggered` (après v1.0 : services métier, v2.0 : client Eureka, v3.0 : Config Server, v4.0 : OpenFeign) |
+| **Jalon livré** | **v6.0** — Résilience : délais d'attente, Retry, Circuit Breaker, Bulkhead, cache de repli et RateLimiter sur les appels vers service-alertes (après v1.0 : services métier, v2.0 : client Eureka, v3.0 : Config Server, v4.0 : OpenFeign, v5.0 : Kafka) |
 
 ---
 
@@ -18,11 +18,11 @@ Il gère la **prise en charge terrain** d'une urgence : affectation d'un assista
 | Java (JDK) | 17 |
 | Maven | Non requis, le wrapper `mvnw` est fourni |
 | Spring Boot | 3.5.6 |
-| Spring Cloud (BOM) | 2025.0.0 (clients Eureka, Config et OpenFeign) |
+| Spring Cloud (BOM) | 2025.0.0 (clients Eureka, Config et OpenFeign, Resilience4j) |
 | Postman | Pour rejouer la collection de tests |
 | Serveur Eureka | Port 8761. Sans lui, le service démarre quand même (avertissements de connexion dans la console) |
 | Config Server | Port 8888. **Sans lui, le service refuse de démarrer** (comportement voulu, voir 5.2) |
-| service-alertes | Port 8082, appelé par OpenFeign (voir 5.3). Sans lui, la création et la consultation enrichie répondent `503` |
+| service-alertes | Port 8082, appelé par OpenFeign (voir 5.3). Sans lui, la création répond `503` et la consultation enrichie passe en mode dégradé (voir 5.5) |
 | Kafka | Conteneur Docker, port 9092, avec les topics `alert-triggered`, `intervention-assigned` et `emergency-resolved` (voir 5.4). Sans lui, la publication des événements échoue (erreur journalisée, l'intervention reste enregistrée) |
 
 ## 2. Architecture du service
@@ -32,7 +32,8 @@ flowchart LR
     Client["Client / Postman"] --> C["InterventionController<br/>/interventions"]
     C --> S["InterventionService<br/>règles métier"]
     S --> R["InterventionRepository"]
-    S --> F["Clients OpenFeign<br/>AlerteRequest, ProtocolRequest"]
+    S --> Z["ResilientRequests<br/>Retry, Circuit Breaker, Bulkhead, cache"]
+    Z --> F["Clients OpenFeign<br/>AlerteRequest, ProtocolRequest"]
     F --> A["service-alertes<br/>(découvert par Eureka)"]
     R --> DB[("Base interventionsdb<br/>H2")]
 ```
@@ -48,10 +49,11 @@ src/main/java/com/telecare/serviceinterventions
 ├── entite       Intervention, StatutIntervention
 ├── dto          InterventionCreationDto, InterventionModificationDto, ArriveeDto, CompteRenduDto,
 │                InterventionDto, InterventionDetailDto
-├── feignClient  AlerteRequest, ProtocolRequest, AlerteDto, ProtocolDto
+├── feignClient  AlerteRequest, ProtocolRequest, AlerteDto, ProtocolDto, ResilientRequests
+├── config       CacheConfig, KafkaConfig
 ├── mapper       InterventionMapper
 └── exception    RessourceIntrouvableException, TransitionInterditeException, InterventionExistanteException,
-                 GlobalExceptionHandler
+                 ServiceExterneIndisponibleException, GlobalExceptionHandler
 ```
 
 ## 3. Modèle de données
@@ -98,7 +100,7 @@ AFFECTEE  ──(arrivée enregistrée)──▶  SUR_PLACE  ──(compte-rendu
 | `PUT` | `/interventions/{id}/cloture` | Clôturer l'intervention | `200` |
 | `DELETE` | `/interventions/{id}` | Supprimer une intervention | `204` |
 
-**Codes d'erreur** : `400` données invalides (validation) · `404` ressource inexistante (locale ou distante) · `409` transition de statut interdite, doublon d'`alertId` ou refus métier · `502` erreur HTTP du service distant · `503` service distant indisponible.
+**Codes d'erreur** : `400` données invalides (validation) · `404` ressource inexistante (locale ou distante) · `409` transition de statut interdite, doublon d'`alertId` ou refus métier · `502` erreur HTTP du service distant · `503` service distant indisponible (création refusée, voir 5.5).
 
 Exemple de création :
 
@@ -278,6 +280,47 @@ docker exec -it kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-serve
 
 Puis saisir : `5001:{"alertId":5001,"beneficiaryId":1,"type":"CHUTE","gravite":"HAUTE"}`. Le renvoyer une deuxième fois : une seule intervention existe pour cet `alertId`.
 
+### 5.5 Résilience des appels vers service-alertes (jalon v6.0)
+
+Les deux appels OpenFeign vers `service-alertes` (`AlerteRequest` et `ProtocolRequest`) passent par la classe `ResilientRequests`, qui ajoute la couche de protection. Un RateLimiter protège aussi la consultation enrichie. Les propriétés sont dans `config-repo/service-interventions.properties`.
+
+| Mécanisme | Emplacement | Réglage |
+|---|---|---|
+| Délais d'attente | OpenFeign | Connexion 1 s, réponse 2 s |
+| Retry | `ResilientRequests` | 3 tentatives, 500 ms d'attente, sur les erreurs de communication et le `503` distant, pour l'alerte (`alertes-service`) et pour le protocole (`protocole-service`) |
+| Circuit Breaker | `ResilientRequests` | Fenêtre de 6 appels, minimum 4 appels, seuil d'échec 50 %, passage automatique en `HALF_OPEN`, erreurs `4xx` ignorées ; 10 s à l'état ouvert pour l'alerte, 5 s pour le protocole |
+| Bulkhead | `ResilientRequests` | 10 appels simultanés au maximum par service distant, sans attente |
+| RateLimiter | `InterventionService.getInterventionDetail` | 5 consultations enrichies par seconde, sans attente |
+| Cache Caffeine | `CacheConfig` | Cache `alertes`, expiration 10 minutes après écriture, 100 entrées au maximum |
+
+Ordre des aspects : le Retry enveloppe le Circuit Breaker, qui enveloppe le Bulkhead. Seul le Retry porte la méthode de repli.
+
+**Deux comportements selon l'opération**
+
+| Opération | Méthode | Si service-alertes est indisponible |
+|---|---|---|
+| Consultation enrichie | `getAlerteByIdFb`, `getProtocolByTypeFb` | Les données de l'alerte viennent du cache ; sans cache, les champs d'alerte sont `null`. Le protocole est `null` s'il est indisponible. Réponse `200` |
+| Création | `getAlerteByIdStrict`, `getProtocolByTypeStrict` | `ServiceExterneIndisponibleException` : réponse `503` « Service-Alertes est momentanément indisponible… » (alerte) ou « Le protocole est momentanément indisponible… » (protocole), rien n'est enregistré |
+
+Toute lecture réussie de l'alerte alimente le cache. Il est en mémoire et se vide au redémarrage du service.
+
+Sont considérés comme une indisponibilité : un circuit ouvert, une erreur de communication (statut `-1`) et un `503` distant. Les autres erreurs, comme un `404`, sont propagées sans réessai.
+
+**Consultation enrichie en mode dégradé** : si le protocole est indisponible après les 3 tentatives, la réponse reste `200`, avec `protocoleEtapes` et `protocoleNiveauPriorite` à `null`. Le cache ne concerne que l'alerte.
+
+**RateLimiter** : quand le quota est dépassé, la consultation répond `200` avec les seules données locales (champs d'alerte et de protocole à `null`), sans appel Feign.
+
+**Mise à jour du code** : dépendances `spring-cloud-starter-circuitbreaker-resilience4j`, `spring-boot-starter-cache` et `caffeine` ajoutées au `pom.xml`, classes `ResilientRequests`, `CacheConfig` et `ServiceExterneIndisponibleException`, gestionnaire `503` dans `GlobalExceptionHandler`.
+
+**Vérification de la panne** (service-alertes arrêté) :
+
+| Étape | Résultat attendu |
+|---|---|
+| Consulter le détail d'une intervention déjà consultée | `200`, données d'alerte lues dans le cache, protocole à `null` |
+| Créer une intervention | `503` avec le message du service indisponible |
+| Lister les interventions | Aucune intervention créée pour l'alerte refusée |
+| Relancer service-alertes, attendre sa réinscription dans Eureka et le passage du circuit en `HALF_OPEN`, puis créer | `201` |
+
 ## 6. Tests
 
 La collection Postman est dans [`postman/service-interventions.postman_collection.json`](postman/service-interventions.postman_collection.json).
@@ -286,7 +329,7 @@ La collection Postman est dans [`postman/service-interventions.postman_collectio
 2. Dans Postman : **Import** puis choisir le fichier de la collection.
 3. Clic droit sur la collection → **Run collection**.
 
-**46 requêtes, 77 tests automatiques, tous réussis.**
+**53 requêtes et 93 tests automatiques (dossiers 1 à 7), tous réussis.** Le dossier 8 (5 requêtes, 11 tests) demande d'arrêter service-alertes à la main : il se lance séparément.
 
 | Dossier | Couverture |
 |---|---|
@@ -296,8 +339,10 @@ La collection Postman est dans [`postman/service-interventions.postman_collectio
 | 4 — Règles métier | Doublon, clôture avant arrivée, double arrivée, modification ou suppression d'une intervention clôturée (`409`), suppression valide (`204`) |
 | 5 — OpenFeign | Alerte introuvable (`404`), alerte non déclenchée (`409`), protocole introuvable (`404`), protocole incompatible (`409`), erreur du service distant (`502`), consultation enrichie (`200`) et intervention inexistante (`404`) |
 | 6 — Kafka | Création (`201`), arrivée, compte-rendu et clôture (`200`), puis échecs sans publication : clôture déjà effectuée, doublon d'`alertId`, alerte non déclenchée (`409`), et intervention créée par `alert-triggered` une seule fois |
+| 7 — Résilience | Création et consultation enrichie avec résilience, alerte introuvable propagée (`404`), alerte non déclenchée (`409`), erreur `500` distante (`502`), intervention inexistante (`404`), RateLimiter avec une rafale de 8 consultations dont au moins une en mode dégradé |
+| 8 — Panne et reprise (manuel) | Service-alertes arrêté : consultation depuis le cache avec protocole à `null` (`200`), création refusée (`503`), rien d'enregistré, circuit ouvert avec refus immédiat (`503`). Service-alertes relancé : création de nouveau possible (`201`) |
 
-Les tests du dossier 5 ont été réalisés avec une simulation de `service-alertes`. Un test manuel complète la collection : `service-alertes` arrêté, `POST /interventions/new` répond `503` « Service ou instance indisponible ».
+Les tests du dossier 5 ont été réalisés avec une simulation de `service-alertes`. Le dossier 8 couvre la panne de `service-alertes` : avant de le lancer, exécuter le dossier 7 (le cache est alors rempli), puis arrêter `service-alertes` ; pour la requête 8.5, relancer `service-alertes` et attendre sa réinscription dans Eureka avant de l'envoyer. Dans le Run collection, décocher le dossier 8.
 
 Le contenu des messages Kafka se vérifie avec le consommateur console (voir 5.4), pas avec Postman. Avant la requête 6.8, envoyer deux fois le message `alert-triggered` de l'`alertId` 5001 avec le producteur console.
 
@@ -310,3 +355,4 @@ Le contenu des messages Kafka se vérifie avec le consommateur console (voir 5.4
 | **v3.0** | Configuration centralisée : fichier dans `config-repo`, service client du Config Server | **Terminé** |
 | **v4.0** | Communication synchrone : clients OpenFeign, création contrôlée, consultation enrichie, gestion des erreurs de communication | **Terminé** |
 | **v5.0** | Communication asynchrone (Kafka) : publication de `intervention-assigned` et `emergency-resolved`, consommation de `alert-triggered`, idempotence, réessais limités | **Terminé** |
+| **v6.0** | Résilience : délais d'attente, Retry, Circuit Breaker, Bulkhead, cache de repli (Caffeine), RateLimiter, création refusée en `503` et consultation en mode dégradé | **Terminé** |

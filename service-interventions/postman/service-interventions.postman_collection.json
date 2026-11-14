@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Tele-Care - service-interventions",
-    "description": "CRUD et cycle de vie AFFECTEE > SUR_PLACE > CLOTUREE, communication OpenFeign avec service-alertes (creation controlee et consultation enrichie). Demarrer Eureka, le Config Server et service-alertes, puis le service sur le port 8083, et executer avec le Collection Runner. Jalon v5.0 : dossier 6 (Kafka).",
+    "description": "CRUD et cycle de vie AFFECTEE > SUR_PLACE > CLOTUREE, communication OpenFeign avec service-alertes (creation controlee et consultation enrichie). Demarrer Eureka, le Config Server et service-alertes, puis le service sur le port 8083, et executer avec le Collection Runner. Jalon v5.0 : dossier 6 (Kafka). Jalon v6.0 : dossier 7 (resilience, services disponibles) et dossier 8 (panne et reprise, avec actions manuelles).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -1812,6 +1812,531 @@
           ]
         }
       ]
+    },
+    {
+      "name": "7 - Resilience (jalon v6.0, services disponibles)",
+      "item": [
+        {
+          "name": "7.1 Creation valide avec resilience (201)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/new",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "new"
+              ]
+            },
+            "description": "Services disponibles. La lecture stricte de l alerte passe par ResilientRequests et alimente le cache.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alertId\": {{alertIdRes}},\n  \"assistantNom\": \"Karim Benali\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"alertIdRes\", Math.floor(Math.random() * 3999) + 6000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "var j = pm.response.json();",
+                  "pm.collectionVariables.set(\"interventionIdRes\", j.id);",
+                  "pm.test(\"statut = AFFECTEE\", function () { pm.expect(j.statut).to.eql(\"AFFECTEE\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7.2 Consultation enrichie (200, donnees distantes)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionIdRes}}/detail",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionIdRes}}",
+                "detail"
+              ]
+            },
+            "description": "Services disponibles. La consultation lit l alerte via la methode tolerante et alimente le cache."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"alerteType rempli\", function () { pm.expect(j.alerteType).to.eql(\"CHUTE\"); });",
+                  "pm.test(\"alerteGravite rempli\", function () { pm.expect(j.alerteGravite).to.be.a(\"string\").and.not.empty; });",
+                  "pm.test(\"alerteStatut = DECLENCHEE\", function () { pm.expect(j.alerteStatut).to.eql(\"DECLENCHEE\"); });",
+                  "pm.test(\"Protocole present\", function () { pm.expect(j.protocoleEtapes).to.be.a(\"string\").and.not.empty; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7.3 Creation : alerte introuvable, le 404 est propage (404)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/new",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "new"
+              ]
+            },
+            "description": "Une erreur metier n est ni reessayee ni transformee en 503 : elle est propagee telle quelle.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alertId\": 1,\n  \"assistantNom\": \"Karim Benali\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Pas de 503\", function () { pm.expect(pm.response.code).to.not.eql(503); });",
+                  "pm.test(\"Reponse rapide (aucun reessai)\", function () { pm.expect(pm.response.responseTime).to.be.below(1500); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7.4 Creation : alerte non DECLENCHEE (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/new",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "new"
+              ]
+            },
+            "description": "L alerte simulee 20 est PRISE_EN_CHARGE. Regle metier conservee avec la resilience.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alertId\": 20,\n  \"assistantNom\": \"Karim Benali\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7.5 Creation : erreur 500 du service distant (502, pas de repli)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/new",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "new"
+              ]
+            },
+            "description": "L alerte simulee 60 repond 500. Ce n est ni un 503 ni une erreur de communication : pas de repli, comportement du jalon v4.0 conserve.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alertId\": 60,\n  \"assistantNom\": \"Karim Benali\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 502\", function () { pm.response.to.have.status(502); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7.6 Consultation : intervention inexistante (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/999999/detail",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "999999",
+                "detail"
+              ]
+            },
+            "description": "Le RateLimiter laisse passer la requete, l erreur 404 est renvoyee normalement."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7.7 RateLimiter : rafale de 8 consultations (mode degrade)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionIdRes}}/detail",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionIdRes}}",
+                "detail"
+              ]
+            },
+            "description": "A LANCER EN DERNIER du dossier 7 (la rafale consomme le quota de 5 par seconde). Envoie 8 consultations simultanees : toutes repondent 200, et au moins une est en mode degrade (champs alerte a null, sans appel Feign)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var total = 8, recus = 0, codes = [], degrades = 0;",
+                  "for (var i = 0; i < total; i++) {",
+                  "  pm.sendRequest({ url: pm.collectionVariables.get(\"baseUrl\") + \"/interventions/\" + pm.collectionVariables.get(\"interventionIdRes\") + \"/detail\", method: \"GET\" }, function (err, res) {",
+                  "    recus++;",
+                  "    codes.push(err ? 0 : res.code);",
+                  "    if (!err && res.code === 200 && res.json().alerteType === null) { degrades++; }",
+                  "    if (recus === total) {",
+                  "      pm.test(\"Les 8 consultations repondent 200\", function () { pm.expect(codes.every(function (c) { return c === 200; })).to.eql(true); });",
+                  "      pm.test(\"Au moins une reponse en mode degrade (RateLimiter)\", function () { pm.expect(degrades).to.be.above(0); });",
+                  "    }",
+                  "  });",
+                  "}",
+                  "pm.test(\"Requete de depart acceptee\", function () { pm.expect(pm.response.code).to.be.oneOf([200]); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "8 - Resilience : panne et reprise (action manuelle, a lancer seul)",
+      "item": [
+        {
+          "name": "8.1 PANNE - Consultation depuis le cache (200)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/{{interventionIdRes}}/detail",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionIdRes}}",
+                "detail"
+              ]
+            },
+            "description": "ACTION MANUELLE AVANT : lancer 7.1 et 7.2 (cache rempli), puis ARRETER alertes-simule (port 8082). Apres les tentatives, la reponse vient du cache. Le protocole (deuxieme appel Feign) est aussi protege : sans service distant, la reponse reste 200 avec les champs du protocole a null."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"Donnees alerte lues dans le cache\", function () { pm.expect(j.alerteType).to.eql(\"CHUTE\"); });",
+                  "pm.test(\"Donnees locales presentes\", function () { pm.expect(j.id).to.eql(pm.collectionVariables.get(\"interventionIdRes\")); });",
+                  "pm.test(\"Protocole absent en mode degrade (null)\", function () { pm.expect(j.protocoleEtapes).to.eql(null); pm.expect(j.protocoleNiveauPriorite).to.eql(null); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.2 PANNE - Creation refusee (503)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/new",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "new"
+              ]
+            },
+            "description": "ACTION MANUELLE AVANT : alertes-simule doit rester arrete. La creation est refusee avec un 503 et le message du service indisponible.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alertId\": {{alertIdRes}},\n  \"assistantNom\": \"Karim Benali\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"alertIdRes\", Math.floor(Math.random() * 3999) + 6000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 503\", function () { pm.response.to.have.status(503); });",
+                  "pm.test(\"Message du service alertes indisponible\", function () { pm.expect(pm.response.text()).to.include(\"Service-Alertes est momentanement indisponible\".replace(\"momentanement\",\"momentanément\")); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.3 PANNE - Rien n est enregistre apres le 503",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/interventions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions"
+              ]
+            },
+            "description": "Apres 8.2 : aucune intervention n a ete creee pour l alerte refusee."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var liste = pm.response.json();",
+                  "pm.test(\"Aucune intervention pour l alerte refusee\", function () { pm.expect(liste.filter(function (i) { return i.alertId === pm.collectionVariables.get(\"alertIdRes\"); }).length).to.eql(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.4 PANNE - Circuit ouvert : refus immediat (503)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/new",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "new"
+              ]
+            },
+            "description": "A LANCER juste apres 8.2, service-alertes toujours arrete (le circuit reste ouvert 10 s). Les echecs de 8.1 et 8.2 ont ouvert le circuit : l'appel est refuse sans tentative reseau, donc la reponse est rapide.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alertId\": {{alertIdRes}},\n  \"assistantNom\": \"Karim Benali\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"alertIdRes\", Math.floor(Math.random() * 3999) + 6000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 503\", function () { pm.response.to.have.status(503); });",
+                  "pm.test(\"Refus immediat par le circuit (aucune attente de reessai)\", function () { pm.expect(pm.response.responseTime).to.be.below(1000); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8.5 REPRISE - Creation de nouveau possible (201)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/interventions/new",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "new"
+              ]
+            },
+            "description": "ACTION MANUELLE AVANT : relancer alertes-simule, attendre sa reinscription dans Eureka et au moins 15 secondes (circuit ouvert 10 s, puis HALF_OPEN).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alertId\": {{alertIdRes}},\n  \"assistantNom\": \"Karim Benali\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"alertIdRes\", Math.floor(Math.random() * 3999) + 6000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 201\", function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "variable": [
@@ -1841,6 +2366,14 @@
     },
     {
       "key": "interventionIdKafka",
+      "value": ""
+    },
+    {
+      "key": "alertIdRes",
+      "value": ""
+    },
+    {
+      "key": "interventionIdRes",
       "value": ""
     }
   ]
