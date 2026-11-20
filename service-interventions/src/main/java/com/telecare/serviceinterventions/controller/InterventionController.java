@@ -62,7 +62,7 @@ public class InterventionController {
             @PathVariable Long id,
             @Valid @RequestBody InterventionModificationDto dto) {
         return ResponseEntity.ok(interventionMapper.toDto(
-                interventionService.modifierIntervention(id, dto.assistantNom())));
+                interventionService.modifierIntervention(id, dto.assistantId())));
     }
 
     // Le corps est facultatif : sans heure, le service prend l'heure actuelle

@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 public record InterventionDto(
         Long id,
         Long alertId,
-        String assistantNom,
+        Long assistantId,
         LocalDateTime heureArrivee,
         String compteRendu,
         StatutIntervention statut

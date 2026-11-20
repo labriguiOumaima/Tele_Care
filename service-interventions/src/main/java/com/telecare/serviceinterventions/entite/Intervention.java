@@ -16,8 +16,9 @@ public class Intervention {
     private Long alertId;
     // Référence distante vers le bénéficiaire (service-beneficiaires) : copiée depuis l'alerte
     private Long beneficiaryId;
+    // Référence distante vers l'assistant (service-utilisateurs) : pas de clé étrangère
     @Column(nullable = false)
-    private String assistantNom;
+    private Long assistantId;
 
     private LocalDateTime heureArrivee;
 
@@ -38,8 +39,8 @@ public class Intervention {
     public void setAlertId(Long alertId) { this.alertId = alertId; }
     public Long getBeneficiaryId() { return beneficiaryId; }
     public void setBeneficiaryId(Long beneficiaryId) { this.beneficiaryId = beneficiaryId; }
-    public String getAssistantNom() { return assistantNom; }
-    public void setAssistantNom(String assistantNom) { this.assistantNom = assistantNom; }
+    public Long getAssistantId() { return assistantId; }
+    public void setAssistantId(Long assistantId) { this.assistantId = assistantId; }
 
     public LocalDateTime getHeureArrivee() { return heureArrivee; }
     public void setHeureArrivee(LocalDateTime heureArrivee) { this.heureArrivee = heureArrivee; }
