@@ -5,14 +5,22 @@ import com.telecare.beneficiaires.servicebeneficiaires.dto.BeneficiaryResponse;
 import com.telecare.beneficiaires.servicebeneficiaires.dto.BeneficiaryDossierResponse;
 import com.telecare.beneficiaires.servicebeneficiaires.dto.ContactResponse;
 import com.telecare.beneficiaires.servicebeneficiaires.entity.Beneficiary;
+import com.telecare.beneficiaires.servicebeneficiaires.entity.BeneficiaryCreation;
 import com.telecare.beneficiaires.servicebeneficiaires.repository.BeneficiaryRepository;
 import com.telecare.beneficiaires.servicebeneficiaires.repository.ContactRepository;
+import com.telecare.beneficiaires.servicebeneficiaires.repository.BeneficiaryCreationRepository;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import tools.jackson.databind.json.JsonMapper;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 
 @Service
@@ -21,16 +29,21 @@ public class BeneficiaryService {
 
     private final BeneficiaryRepository beneficiaryRepository;
     private final ContactRepository contactRepository;
+    private final BeneficiaryCreationRepository creationRepository;
+
+    private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
     public BeneficiaryService(
             BeneficiaryRepository beneficiaryRepository,
-            ContactRepository contactRepository) {
+            ContactRepository contactRepository,
+            BeneficiaryCreationRepository creationRepository) {
 
         this.beneficiaryRepository = beneficiaryRepository;
         this.contactRepository = contactRepository;
+        this.creationRepository = creationRepository;
     }
 
-    // Ajouter un bénéficiaire
+    // Création simple, conservée pour le contrôleur actuel.
     public BeneficiaryResponse create(BeneficiaryRequest request) {
         Beneficiary beneficiary = new Beneficiary();
         applyRequest(beneficiary, request);
@@ -40,7 +53,55 @@ public class BeneficiaryService {
         return toResponse(saved);
     }
 
-    // Consulter tous les bénéficiaires
+    // Création avec une clé d'idempotence.
+    public BeneficiaryResponse create(
+            BeneficiaryRequest request,
+            String idempotencyKey) {
+
+        if (idempotencyKey == null
+                || idempotencyKey.isBlank()
+                || idempotencyKey.length() > 100) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Idempotency-Key doit contenir entre 1 et 100 caractères"
+            );
+        }
+
+        String requestJson = jsonMapper.writeValueAsString(request);
+        String requestHash = calculateHash(requestJson);
+
+        var previousCreation =
+                creationRepository.findById(idempotencyKey);
+
+        if (previousCreation.isPresent()) {
+            BeneficiaryCreation previous = previousCreation.get();
+
+            if (!previous.getRequestHash().equals(requestHash)) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Cette clé a déjà été utilisée avec des données différentes"
+                );
+            }
+
+            return jsonMapper.readValue(
+                    previous.getResponseJson(),
+                    BeneficiaryResponse.class
+            );
+        }
+
+        BeneficiaryResponse response = create(request);
+
+        creationRepository.saveAndFlush(new BeneficiaryCreation(
+                idempotencyKey,
+                requestHash,
+                jsonMapper.writeValueAsString(response)
+        ));
+
+        return response;
+    }
+
+    // Consulter tous les bénéficiaires.
     @Transactional(readOnly = true)
     public List<BeneficiaryResponse> findAll() {
         return beneficiaryRepository.findAll()
@@ -49,13 +110,13 @@ public class BeneficiaryService {
                 .toList();
     }
 
-    // Consulter un bénéficiaire
+    // Consulter un bénéficiaire.
     @Transactional(readOnly = true)
     public BeneficiaryResponse findById(Long id) {
         return toResponse(getExistingBeneficiary(id));
     }
 
-    // Consulter le dossier complet : bénéficiaire et contacts
+    // Consulter le bénéficiaire et ses contacts.
     @Transactional(readOnly = true)
     public BeneficiaryDossierResponse getDossier(Long id) {
         Beneficiary beneficiary = getExistingBeneficiary(id);
@@ -78,7 +139,7 @@ public class BeneficiaryService {
         );
     }
 
-    // Modifier un bénéficiaire existant
+    // Modifier un bénéficiaire.
     public BeneficiaryResponse update(
             Long id,
             BeneficiaryRequest request) {
@@ -89,7 +150,7 @@ public class BeneficiaryService {
         return toResponse(beneficiaryRepository.save(beneficiary));
     }
 
-    // Supprimer un bénéficiaire sans contacts
+    // Supprimer un bénéficiaire sans contacts.
     public void delete(Long id) {
         Beneficiary beneficiary = getExistingBeneficiary(id);
 
@@ -131,5 +192,20 @@ public class BeneficiaryService {
                 beneficiary.getPathologie(),
                 beneficiary.getTelephone()
         );
+    }
+
+    private String calculateHash(String value) {
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8));
+
+            return HexFormat.of().formatHex(hash);
+
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException(
+                    "SHA-256 indisponible",
+                    ex
+            );
+        }
     }
 }

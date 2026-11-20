@@ -25,9 +25,12 @@ public class BeneficiaryController {
 
     @PostMapping
     public ResponseEntity<BeneficiaryResponse> create(
-            @Valid @RequestBody BeneficiaryRequest request) {
+            @Valid @RequestBody BeneficiaryRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false)
+            String idempotencyKey) {
 
-        BeneficiaryResponse response = beneficiaryService.create(request);
+        BeneficiaryResponse response =
+                beneficiaryService.create(request, idempotencyKey);
 
         return ResponseEntity
                 .created(URI.create("/beneficiaires/" + response.id()))
