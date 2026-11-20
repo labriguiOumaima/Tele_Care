@@ -23,9 +23,12 @@ public class ContactController {
 
     @PostMapping("/contacts")
     public ResponseEntity<ContactResponse> create(
-            @Valid @RequestBody ContactRequest request) {
+            @Valid @RequestBody ContactRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false)
+            String idempotencyKey) {
 
-        ContactResponse response = contactService.create(request);
+        ContactResponse response =
+                contactService.create(request, idempotencyKey);
 
         return ResponseEntity
                 .created(URI.create("/contacts/" + response.id()))

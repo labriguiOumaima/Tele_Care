@@ -3,14 +3,22 @@ package com.telecare.beneficiaires.servicebeneficiaires.service;
 import com.telecare.beneficiaires.servicebeneficiaires.dto.ContactRequest;
 import com.telecare.beneficiaires.servicebeneficiaires.dto.ContactResponse;
 import com.telecare.beneficiaires.servicebeneficiaires.entity.Contact;
+import com.telecare.beneficiaires.servicebeneficiaires.entity.ContactCreation;
 import com.telecare.beneficiaires.servicebeneficiaires.repository.BeneficiaryRepository;
 import com.telecare.beneficiaires.servicebeneficiaires.repository.ContactRepository;
+import com.telecare.beneficiaires.servicebeneficiaires.repository.ContactCreationRepository;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import tools.jackson.databind.json.JsonMapper;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 
 @Service
@@ -19,15 +27,21 @@ public class ContactService {
 
     private final ContactRepository contactRepository;
     private final BeneficiaryRepository beneficiaryRepository;
+    private final ContactCreationRepository creationRepository;
+
+    private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
     public ContactService(
             ContactRepository contactRepository,
-            BeneficiaryRepository beneficiaryRepository) {
+            BeneficiaryRepository beneficiaryRepository,
+            ContactCreationRepository creationRepository) {
 
         this.contactRepository = contactRepository;
         this.beneficiaryRepository = beneficiaryRepository;
+        this.creationRepository = creationRepository;
     }
 
+    // Création simple, utilisée par le contrôleur actuel.
     public ContactResponse create(ContactRequest request) {
         checkBeneficiaryExists(request.beneficiaryId());
 
@@ -35,6 +49,54 @@ public class ContactService {
         applyRequest(contact, request);
 
         return toResponse(contactRepository.save(contact));
+    }
+
+    // Création avec une clé d'idempotence.
+    public ContactResponse create(
+            ContactRequest request,
+            String idempotencyKey) {
+
+        if (idempotencyKey == null
+                || idempotencyKey.isBlank()
+                || idempotencyKey.length() > 100) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Idempotency-Key doit contenir entre 1 et 100 caractères"
+            );
+        }
+
+        String requestJson = jsonMapper.writeValueAsString(request);
+        String requestHash = calculateHash(requestJson);
+
+        var previousCreation =
+                creationRepository.findById(idempotencyKey);
+
+        if (previousCreation.isPresent()) {
+            ContactCreation previous = previousCreation.get();
+
+            if (!previous.getRequestHash().equals(requestHash)) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Cette clé a déjà été utilisée avec des données différentes"
+                );
+            }
+
+            return jsonMapper.readValue(
+                    previous.getResponseJson(),
+                    ContactResponse.class
+            );
+        }
+
+        ContactResponse response = create(request);
+
+        creationRepository.saveAndFlush(new ContactCreation(
+                idempotencyKey,
+                requestHash,
+                jsonMapper.writeValueAsString(response)
+        ));
+
+        return response;
     }
 
     @Transactional(readOnly = true)
@@ -55,7 +117,6 @@ public class ContactService {
     public ContactResponse update(Long id, ContactRequest request) {
         Contact contact = getExistingContact(id);
 
-        // Vérifier le bénéficiaire avant toute modification
         checkBeneficiaryExists(request.beneficiaryId());
 
         applyRequest(contact, request);
@@ -100,5 +161,20 @@ public class ContactService {
                 contact.getLien(),
                 contact.getTelephone()
         );
+    }
+
+    private String calculateHash(String value) {
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8));
+
+            return HexFormat.of().formatHex(hash);
+
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException(
+                    "SHA-256 indisponible",
+                    ex
+            );
+        }
     }
 }
