@@ -75,7 +75,6 @@
         </dependency>
 
         <!-- Enregistrement et découverte avec Eureka -->
-        <!-- Enregistrement et découverte avec Eureka -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
@@ -87,8 +86,11 @@
             <artifactId>spring-cloud-starter-config</artifactId>
         </dependency>
 
-        <!-- Tests -->
-
+        <!-- Appels entre microservices -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
 
         <!-- Tests -->
         <dependency>
