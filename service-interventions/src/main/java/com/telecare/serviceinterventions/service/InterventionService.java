@@ -11,6 +11,7 @@ import com.telecare.serviceinterventions.exception.TransitionInterditeException;
 import com.telecare.serviceinterventions.feignClient.AlerteDto;
 import com.telecare.serviceinterventions.feignClient.ProtocolDto;
 import com.telecare.serviceinterventions.feignClient.ResilientRequests;
+import com.telecare.serviceinterventions.feignClient.UtilisateurDto; // NOUVEAU
 import com.telecare.serviceinterventions.messaging.InterventionEventPublisher;
 import com.telecare.serviceinterventions.repository.InterventionRepository;
 import io.github.resilience4j.ratelimiter.RequestNotPermitted;
@@ -70,7 +71,7 @@ public class InterventionService {
         return new InterventionDetailDto(
                 intervention.getId(),
                 intervention.getAlertId(),
-                intervention.getAssistantNom(),
+                intervention.getAssistantId(),
                 intervention.getHeureArrivee(),
                 intervention.getCompteRendu(),
                 intervention.getStatut(),
@@ -87,7 +88,7 @@ public class InterventionService {
         return new InterventionDetailDto(
                 intervention.getId(),
                 intervention.getAlertId(),
-                intervention.getAssistantNom(),
+                intervention.getAssistantId(),
                 intervention.getHeureArrivee(),
                 intervention.getCompteRendu(),
                 intervention.getStatut(),
@@ -123,6 +124,9 @@ public class InterventionService {
                     "Le protocole " + protocole.id() + " ne correspond pas au type d'alerte " + alerte.type());
         }
 
+        // 5 bis. L'assistant doit etre actif et avoir le role ASSISTANT (V4)   // NOUVEAU
+        verifierAssistant(intervention.getAssistantId());                        // NOUVEAU
+
         // 6. Tout est valide : creation
         intervention.setId(null);
         intervention.setBeneficiaryId(alerte.beneficiaryId());
@@ -135,7 +139,7 @@ public class InterventionService {
                 enregistree.getId(),
                 enregistree.getAlertId(),
                 enregistree.getBeneficiaryId(),
-                enregistree.getAssistantNom(),
+                enregistree.getAssistantId(),
                 LocalDateTime.now());
         apresCommit(() -> eventPublisher.publierAffectation(event));
 
@@ -195,12 +199,13 @@ public class InterventionService {
     }
 
     @Transactional
-    public Intervention modifierIntervention(Long id, String assistantNom) {
+    public Intervention modifierIntervention(Long id, Long assistantId) {
         Intervention intervention = getInterventionById(id);
         if (intervention.getStatut() == StatutIntervention.CLOTUREE) {
             throw new TransitionInterditeException("Une intervention CLOTUREE ne peut plus etre modifiee");
         }
-        intervention.setAssistantNom(assistantNom);
+        verifierAssistant(assistantId); // NOUVEAU
+        intervention.setAssistantId(assistantId);
         return interventionRepository.save(intervention);
     }
 
@@ -211,6 +216,22 @@ public class InterventionService {
             throw new TransitionInterditeException("Une intervention CLOTUREE ne peut pas etre supprimee");
         }
         interventionRepository.delete(intervention);
+    }
+
+    // NOUVEAU : l'assistant doit exister, etre actif et avoir le role ASSISTANT
+    private void verifierAssistant(Long assistantId) {
+        // 404 si introuvable, 503 si service-utilisateurs injoignable
+        UtilisateurDto assistant = resilientRequests.getUtilisateurByIdStrict(assistantId);
+
+        if (!Boolean.TRUE.equals(assistant.actif())) {
+            throw new TransitionInterditeException(
+                    "L'assistant " + assistantId + " n'est pas actif");
+        }
+        if (!"ASSISTANT".equalsIgnoreCase(assistant.role())) {
+            throw new TransitionInterditeException(
+                    "L'utilisateur " + assistantId + " n'a pas le role ASSISTANT (role actuel : "
+                            + assistant.role() + ")");
+        }
     }
 
     // Execute l'action seulement si la transaction est validee (commit)

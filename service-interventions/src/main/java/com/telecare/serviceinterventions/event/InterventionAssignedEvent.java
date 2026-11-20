@@ -7,7 +7,7 @@ public record InterventionAssignedEvent(
         Long interventionId,
         Long alertId,
         Long beneficiaryId,
-        String assistantNom,
+        Long assistantId,
         LocalDateTime dateAffectation
 ) {
 }

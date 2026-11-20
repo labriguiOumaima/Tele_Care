@@ -8,17 +8,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Service
 public class AssistantAstreinteService {
 
-    // Liste fictive d'assistants d'astreinte (suffisante pour cette version)
-    private static final List<String> ASSISTANTS = List.of(
-            "Karim Benali",
-            "Nadia Alaoui",
-            "Youssef Tazi",
-            "Salma Idrissi");
+    // Liste provisoire d'identifiants d'assistants, en attendant service-utilisateurs
+    private static final List<Long> ASSISTANTS = List.of(1L, 2L, 3L, 4L);
 
     private final AtomicInteger compteur = new AtomicInteger(0);
 
     // Choix a tour de role : chaque nouvelle intervention prend l'assistant suivant
-    public String prochainAssistant() {
+    public Long prochainAssistant() {
         int index = Math.floorMod(compteur.getAndIncrement(), ASSISTANTS.size());
         return ASSISTANTS.get(index);
     }

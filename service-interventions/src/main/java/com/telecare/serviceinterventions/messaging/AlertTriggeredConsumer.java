@@ -51,7 +51,7 @@ public class AlertTriggeredConsumer {
         // 3. Creer l'intervention avec un assistant de la liste fictive
         Intervention intervention = new Intervention();
         intervention.setAlertId(event.alertId());
-        intervention.setAssistantNom(assistantService.prochainAssistant());
+        intervention.setAssistantId(assistantService.prochainAssistant());
 
         try {
             interventionService.creerIntervention(intervention);

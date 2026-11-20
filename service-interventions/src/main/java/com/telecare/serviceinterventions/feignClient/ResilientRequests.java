@@ -19,13 +19,16 @@ public class ResilientRequests {
 
     private final AlerteRequest alerteRequest;
     private final ProtocolRequest protocolRequest;
+    private final UtilisateurRequest utilisateurRequest; // NOUVEAU
     private final CacheManager cacheManager;
 
     public ResilientRequests(AlerteRequest alerteRequest,
                              ProtocolRequest protocolRequest,
+                             UtilisateurRequest utilisateurRequest, // NOUVEAU
                              CacheManager cacheManager) {
         this.alerteRequest = alerteRequest;
         this.protocolRequest = protocolRequest;
+        this.utilisateurRequest = utilisateurRequest; // NOUVEAU
         this.cacheManager = cacheManager;
     }
 
@@ -67,6 +70,14 @@ public class ResilientRequests {
         return protocolRequest.getProtocolByType(type);
     }
 
+    // NOUVEAU --- Utilisateur (assistant) : lecture stricte (exception 503) ---
+    @Retry(name = "utilisateurs-service", fallbackMethod = "utilisateurIndisponible")
+    @CircuitBreaker(name = "utilisateurs-service")
+    @Bulkhead(name = "utilisateurs-service")
+    public UtilisateurDto getUtilisateurByIdStrict(Long id) {
+        return utilisateurRequest.getUtilisateurById(id);
+    }
+
     // --- Replis ---
     private AlerteDto alerteIndisponible(Long id, RuntimeException ex) {
         if (!estIndisponible(ex)) {
@@ -101,6 +112,15 @@ public class ResilientRequests {
         }
         log.info("Protocole {} indisponible : reponse sans protocole", type);
         return null;
+    }
+
+    // NOUVEAU
+    private UtilisateurDto utilisateurIndisponible(Long id, RuntimeException ex) {
+        if (!estIndisponible(ex)) {
+            throw ex;
+        }
+        throw new ServiceExterneIndisponibleException(
+                "Service-Utilisateurs est momentanément indisponible. Réessayez dans quelques instants.");
     }
 
     private boolean estIndisponible(RuntimeException cause) {
