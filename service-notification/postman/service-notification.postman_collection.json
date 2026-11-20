@@ -1,0 +1,20 @@
+{
+  "info": {
+    "name": "service-notification",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Lister les notifications",
+      "request": { "method": "GET", "url": "http://localhost:8085/notifications" }
+    },
+    {
+      "name": "Notifications d'une alerte",
+      "request": { "method": "GET", "url": "http://localhost:8085/notifications?alertId=1" }
+    },
+    {
+      "name": "Detail d'une notification",
+      "request": { "method": "GET", "url": "http://localhost:8085/notifications/1" }
+    }
+  ]
+}
