@@ -1,20 +1,678 @@
 {
   "info": {
-    "name": "service-notification",
+    "name": "Tele-Care - service-notification",
+    "description": "Verification de service-notification (port 8085) : consultation des notifications, cycle complet via service-interventions (Kafka : intervention-assigned et emergency-resolved), idempotence et panne de service-beneficiaires. Le dossier 1 ne demande que service-notification. Le dossier 2 demande tous les services et Kafka. Le dossier 3 demande des actions manuelles.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
-      "name": "Lister les notifications",
-      "request": { "method": "GET", "url": "http://localhost:8085/notifications" }
+      "name": "1 - Consultation (service-notification seul)",
+      "item": [
+        {
+          "name": "1.1 Liste des notifications (200)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Reponse = tableau\", function () { pm.expect(pm.response.json()).to.be.an(\"array\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.2 Filtre sur une alerte sans notification (200, liste vide)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications?alertId=999999999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "alertId",
+                  "value": "999999999"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Liste vide\", function () { pm.expect(pm.response.json()).to.have.lengthOf(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.3 Detail : id inexistant (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/999999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "999999"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Message attendu\", function () { pm.expect(pm.response.text()).to.include(\"Notification introuvable\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.4 Detail : id invalide (400)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "abc"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 400\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.5 Filtre : alertId invalide (400)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications?alertId=abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "alertId",
+                  "value": "abc"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 400\", function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     },
     {
-      "name": "Notifications d'une alerte",
-      "request": { "method": "GET", "url": "http://localhost:8085/notifications?alertId=1" }
+      "name": "2 - Cycle complet via service-interventions (Kafka, jalon V7)",
+      "description": "Services necessaires : Eureka, Config Server, Kafka, service-alertes (ou alertes-simule), service-utilisateurs (ou simulateur), service-beneficiaires (ou simulateur avec au moins un contact), service-interventions (8083) et service-notification (8085). Lancer le dossier en entier, dans l'ordre.",
+      "item": [
+        {
+          "name": "2.1 Creer une intervention (publie intervention-assigned)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{interventionsUrl}}/interventions/new",
+              "host": [
+                "{{interventionsUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "new"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alertId\": {{alertIdNotif}},\n  \"assistantId\": {{assistantOk}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"alertIdNotif\", Math.floor(Math.random() * 3999) + 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "var j = pm.response.json();",
+                  "pm.collectionVariables.set(\"interventionIdNotif\", j.id);",
+                  "pm.test(\"statut = AFFECTEE\", function () { pm.expect(j.statut).to.eql(\"AFFECTEE\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.2 Notification PRISE_EN_CHARGE recue (200)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications?alertId={{alertIdNotif}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "alertId",
+                  "value": "{{alertIdNotif}}"
+                }
+              ]
+            },
+            "description": "Si ce test echoue : verifier que Kafka tourne, que service-beneficiaires repond avec au moins un contact pour le beneficiaire de l'alerte, et les logs de service-notification."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Laisse le temps a Kafka et au consommateur de traiter le message",
+                  "setTimeout(function () {}, 3000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var liste = pm.response.json();",
+                  "var n = liste.filter(function (x) { return x.type === \"PRISE_EN_CHARGE\"; });",
+                  "pm.test(\"Une notification PRISE_EN_CHARGE\", function () { pm.expect(n.length).to.eql(1); });",
+                  "pm.test(\"alertId et interventionId corrects\", function () { pm.expect(n[0].alertId).to.eql(Number(pm.collectionVariables.get(\"alertIdNotif\"))); pm.expect(n[0].interventionId).to.eql(Number(pm.collectionVariables.get(\"interventionIdNotif\"))); });",
+                  "pm.test(\"Contact renseigne\", function () { pm.expect(n[0].contactNom).to.be.a(\"string\").and.not.empty; pm.expect(n[0].contactTelephone).to.be.a(\"string\").and.not.empty; });",
+                  "pm.test(\"Message de prise en charge\", function () { pm.expect(n[0].message).to.include(\"est prise en charge\"); });",
+                  "pm.collectionVariables.set(\"notificationId\", n[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.3 Detail de la notification (200)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/{{notificationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "{{notificationId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var j = pm.response.json();",
+                  "pm.test(\"Meme notification\", function () { pm.expect(j.id).to.eql(Number(pm.collectionVariables.get(\"notificationId\"))); });",
+                  "pm.test(\"Type PRISE_EN_CHARGE\", function () { pm.expect(j.type).to.eql(\"PRISE_EN_CHARGE\"); });",
+                  "pm.test(\"dateEnvoi renseignee\", function () { pm.expect(j.dateEnvoi).to.not.be.null; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.4 Enregistrer l'arrivee de l'assistant",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{interventionsUrl}}/interventions/{{interventionIdNotif}}/arrivee",
+              "host": [
+                "{{interventionsUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionIdNotif}}",
+                "arrivee"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"statut = SUR_PLACE\", function () { pm.expect(pm.response.json().statut).to.eql(\"SUR_PLACE\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.5 Rediger le compte-rendu",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{interventionsUrl}}/interventions/{{interventionIdNotif}}/compte-rendu",
+              "host": [
+                "{{interventionsUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionIdNotif}}",
+                "compte-rendu"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"compteRendu\": \"Personne retrouvee consciente, rien a signaler. Contact prevenu.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.6 Cloturer l'intervention (publie emergency-resolved)",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{interventionsUrl}}/interventions/{{interventionIdNotif}}/cloture",
+              "host": [
+                "{{interventionsUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "{{interventionIdNotif}}",
+                "cloture"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"statut = CLOTUREE\", function () { pm.expect(pm.response.json().statut).to.eql(\"CLOTUREE\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.7 Notification RESOLUTION recue (200)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications?alertId={{alertIdNotif}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "alertId",
+                  "value": "{{alertIdNotif}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Laisse le temps a Kafka et au consommateur de traiter le message",
+                  "setTimeout(function () {}, 3000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "var liste = pm.response.json();",
+                  "var r = liste.filter(function (x) { return x.type === \"RESOLUTION\"; });",
+                  "pm.test(\"Une notification RESOLUTION\", function () { pm.expect(r.length).to.eql(1); });",
+                  "pm.test(\"Compte-rendu dans le message\", function () { pm.expect(r[0].message).to.include(\"rien a signaler\"); });",
+                  "pm.test(\"Deux notifications pour l alerte (prise en charge + resolution)\", function () { pm.expect(liste.length).to.eql(2); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     },
     {
-      "name": "Detail d'une notification",
-      "request": { "method": "GET", "url": "http://localhost:8085/notifications/1" }
+      "name": "3 - Idempotence et panne (actions manuelles, a lancer seul)",
+      "description": "Ce dossier demande des actions manuelles entre les requetes. Lancer les requetes une par une, pas avec le Runner.",
+      "item": [
+        {
+          "name": "3.1 AVANT : compter les notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.collectionVariables.set(\"countAvant\", pm.response.json().length);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.2 APRES republication du meme evenement : rien de nouveau",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications"
+              ]
+            },
+            "description": "ACTION MANUELLE AVANT : avec la console Kafka, republier un message deja envoye (meme eventId) sur intervention-assigned ou emergency-resolved, puis attendre quelques secondes. Idempotence : aucune notification ne doit etre ajoutee."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Laisse le temps a Kafka et au consommateur de traiter le message",
+                  "setTimeout(function () {}, 3000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Aucune notification ajoutee (meme eventId)\", function () { pm.expect(pm.response.json().length).to.eql(Number(pm.collectionVariables.get(\"countAvant\"))); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.3 PANNE : creer une intervention avec service-beneficiaires arrete",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{interventionsUrl}}/interventions/new",
+              "host": [
+                "{{interventionsUrl}}"
+              ],
+              "path": [
+                "interventions",
+                "new"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alertId\": {{alertIdPanne}},\n  \"assistantId\": {{assistantOk}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "ACTION MANUELLE AVANT : arreter service-beneficiaires (ou son simulateur). L'intervention est creee normalement : service-interventions ne depend pas de lui."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"alertIdPanne\", Math.floor(Math.random() * 3999) + 6000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 201\", function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.4 PANNE : aucune notification apres les essais (200, liste vide)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications?alertId={{alertIdPanne}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "alertId",
+                  "value": "{{alertIdPanne}}"
+                }
+              ]
+            },
+            "description": "Apres 3 tentatives du consommateur (2 s d'intervalle), le message est abandonne : aucune notification pour cette alerte. Les logs de service-notification montrent les essais puis 'Message abandonne'."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Laisse le temps a Kafka et au consommateur de traiter le message",
+                  "setTimeout(function () {}, 12000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Code HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Aucune notification (contact injoignable)\", function () { pm.expect(pm.response.json()).to.have.lengthOf(0); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8085"
+    },
+    {
+      "key": "interventionsUrl",
+      "value": "http://localhost:8083"
+    },
+    {
+      "key": "assistantOk",
+      "value": "1"
+    },
+    {
+      "key": "alertIdNotif",
+      "value": ""
+    },
+    {
+      "key": "interventionIdNotif",
+      "value": ""
+    },
+    {
+      "key": "notificationId",
+      "value": ""
+    },
+    {
+      "key": "countAvant",
+      "value": ""
+    },
+    {
+      "key": "alertIdPanne",
+      "value": ""
     }
   ]
 }
