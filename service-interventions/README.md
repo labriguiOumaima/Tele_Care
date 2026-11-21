@@ -7,7 +7,7 @@ Il gère la **prise en charge terrain** d'une urgence : affectation d'un assista
 |---|---|
 | **Port** | 8083 |
 | **Base de données** | H2 en mémoire (`interventionsdb`), propre au service |
-| **Jalon livré** | **v6.0** — Résilience : délais d'attente, Retry, Circuit Breaker, Bulkhead, cache de repli et RateLimiter sur les appels vers service-alertes (après v1.0 : services métier, v2.0 : client Eureka, v3.0 : Config Server, v4.0 : OpenFeign, v5.0 : Kafka) |
+| **Jalon livré** | **v6.0** — Résilience : délais d'attente, Retry, Circuit Breaker, Bulkhead, cache de repli et RateLimiter sur les appels Feign (après v1.0 : services métier, v2.0 : client Eureka, v3.0 : Config Server, v4.0 : OpenFeign, v5.0 : Kafka). Évolution de v4.0 : l'assistant est désigné par `assistantId` et vérifié auprès de service-utilisateurs |
 
 ---
 
@@ -23,6 +23,7 @@ Il gère la **prise en charge terrain** d'une urgence : affectation d'un assista
 | Serveur Eureka | Port 8761. Sans lui, le service démarre quand même (avertissements de connexion dans la console) |
 | Config Server | Port 8888. **Sans lui, le service refuse de démarrer** (comportement voulu, voir 5.2) |
 | service-alertes | Port 8082, appelé par OpenFeign (voir 5.3). Sans lui, la création répond `503` et la consultation enrichie passe en mode dégradé (voir 5.5) |
+| service-utilisateurs | Appelé par OpenFeign pour vérifier l'assistant (actif, rôle `ASSISTANT`, voir 5.3). Sans lui, la création et la modification de l'assistant répondent `503` |
 | Kafka | Conteneur Docker, port 9092, avec les topics `alert-triggered`, `intervention-assigned` et `emergency-resolved` (voir 5.4). Sans lui, la publication des événements échoue (erreur journalisée, l'intervention reste enregistrée) |
 
 ## 2. Architecture du service
@@ -33,8 +34,9 @@ flowchart LR
     C --> S["InterventionService<br/>règles métier"]
     S --> R["InterventionRepository"]
     S --> Z["ResilientRequests<br/>Retry, Circuit Breaker, Bulkhead, cache"]
-    Z --> F["Clients OpenFeign<br/>AlerteRequest, ProtocolRequest"]
+    Z --> F["Clients OpenFeign<br/>AlerteRequest, ProtocolRequest,<br/>UtilisateurRequest"]
     F --> A["service-alertes<br/>(découvert par Eureka)"]
+    F --> U["service-utilisateurs<br/>(découvert par Eureka)"]
     R --> DB[("Base interventionsdb<br/>H2")]
 ```
 
@@ -44,12 +46,15 @@ Le service a sa **propre base de données** (*Database per Service*) : il ne par
 ```
 src/main/java/com/telecare/serviceinterventions
 ├── controller   InterventionController
-├── service      InterventionService
+├── service      InterventionService, AssistantAstreinteService
 ├── repository   InterventionRepository
 ├── entite       Intervention, StatutIntervention
 ├── dto          InterventionCreationDto, InterventionModificationDto, ArriveeDto, CompteRenduDto,
 │                InterventionDto, InterventionDetailDto
-├── feignClient  AlerteRequest, ProtocolRequest, AlerteDto, ProtocolDto, ResilientRequests
+├── feignClient  AlerteRequest, ProtocolRequest, UtilisateurRequest, AlerteDto, ProtocolDto, UtilisateurDto,
+│                ResilientRequests
+├── event        AlertTriggeredEvent, InterventionAssignedEvent, EmergencyResolvedEvent
+├── messaging    AlertTriggeredConsumer, InterventionEventPublisher
 ├── config       CacheConfig, KafkaConfig
 ├── mapper       InterventionMapper
 └── exception    RessourceIntrouvableException, TransitionInterditeException, InterventionExistanteException,
@@ -64,7 +69,8 @@ Entité **`Intervention`**, conforme au diagramme de classes du projet :
 |---|---|---|
 | `id` | `Long` | Identifiant généré |
 | `alertId` | `Long` | **Référence distante** vers l'alerte (service-alertes). Aucune clé étrangère, car la base est séparée. Unique : une seule intervention par alerte |
-| `assistantNom` | `String` | Assistant d'astreinte affecté (obligatoire) |
+| `beneficiaryId` | `Long` | **Référence distante** vers le bénéficiaire (service-beneficiaires), copiée depuis l'alerte à la création |
+| `assistantId` | `Long` | **Référence distante** vers l'assistant (service-utilisateurs). Obligatoire. L'assistant doit être actif et avoir le rôle `ASSISTANT` |
 | `heureArrivee` | `LocalDateTime` | Heure d'arrivée sur place |
 | `compteRendu` | `String` | Compte-rendu de l'intervention (2000 caractères max) |
 | `statut` | `StatutIntervention` | Stocké en texte en base |
@@ -79,11 +85,11 @@ AFFECTEE  ──(arrivée enregistrée)──▶  SUR_PLACE  ──(compte-rendu
 
 | Action | Condition | Sinon |
 |---|---|---|
-| Créer | Aucune intervention pour cet `alertId` | `409` |
+| Créer | Aucune intervention pour cet `alertId`, assistant actif avec le rôle `ASSISTANT` | `409` |
 | Enregistrer l'arrivée | Statut `AFFECTEE` | `409` |
 | Rédiger le compte-rendu | Statut `SUR_PLACE` | `409` |
 | Clôturer | Statut `SUR_PLACE` et compte-rendu rédigé | `409` |
-| Modifier l'assistant | Statut différent de `CLOTUREE` | `409` |
+| Modifier l'assistant | Statut différent de `CLOTUREE`, nouvel assistant actif avec le rôle `ASSISTANT` | `409` |
 | Supprimer | Statut différent de `CLOTUREE` | `409` |
 
 ## 4. API REST
@@ -93,8 +99,8 @@ AFFECTEE  ──(arrivée enregistrée)──▶  SUR_PLACE  ──(compte-rendu
 | `GET` | `/interventions` | Lister (filtre optionnel `?statut=SUR_PLACE`) | `200` |
 | `GET` | `/interventions/{id}` | Consulter une intervention | `200` |
 | `GET` | `/interventions/{id}/detail` | Consultation enrichie : intervention, alerte et protocole (OpenFeign) | `200` |
-| `POST` | `/interventions/new` | Créer une intervention, après vérification de l'alerte et de son protocole | `201` + `Location` |
-| `PUT` | `/interventions/{id}` | Modifier l'assistant affecté (interdit si `CLOTUREE`) | `200` |
+| `POST` | `/interventions/new` | Créer une intervention, après vérification de l'alerte, de son protocole et de l'assistant | `201` + `Location` |
+| `PUT` | `/interventions/{id}` | Modifier l'assistant affecté (vérifié auprès de service-utilisateurs, interdit si `CLOTUREE`) | `200` |
 | `PUT` | `/interventions/{id}/arrivee` | Enregistrer l'heure d'arrivée (corps facultatif, heure actuelle par défaut) | `200` |
 | `PUT` | `/interventions/{id}/compte-rendu` | Rédiger le compte-rendu | `200` |
 | `PUT` | `/interventions/{id}/cloture` | Clôturer l'intervention | `200` |
@@ -108,13 +114,13 @@ Exemple de création :
 POST /interventions/new
 {
   "alertId": 42,
-  "assistantNom": "Karim Benali"
+  "assistantId": 1
 }
 ```
 
 ## 5. Lancer le service
 
-**Ordre de démarrage** : Eureka (8761), Config Server (8888), service-alertes (8082), puis ce service (8083).
+**Ordre de démarrage** : Eureka (8761), Config Server (8888), Kafka (9092), service-alertes (8082), service-utilisateurs, puis ce service (8083).
 
 Depuis le dossier `service-interventions` :
 
@@ -174,12 +180,15 @@ La dépendance `spring-cloud-starter-config` est ajoutée au `pom.xml`.
 
 ### 5.3 Communication synchrone avec OpenFeign (jalon v4.0)
 
-Le service appelle `service-alertes` grâce à deux clients OpenFeign typés (`AlerteRequest`, `ProtocolRequest`). L'adresse n'est pas écrite en dur : le client utilise le nom `service-alertes` découvert par Eureka (`@EnableFeignClients`, avec `spring-cloud-starter-openfeign` et `spring-cloud-starter-loadbalancer`).
+Le service appelle `service-alertes` et `service-utilisateurs` grâce à trois clients OpenFeign typés (`AlerteRequest`, `ProtocolRequest`, `UtilisateurRequest`). L'adresse n'est pas écrite en dur : chaque client utilise le nom du service découvert par Eureka (`@EnableFeignClients`, avec `spring-cloud-starter-openfeign` et `spring-cloud-starter-loadbalancer`).
 
 | Client | Appel | DTO de réponse |
 |---|---|---|
 | `AlerteRequest` | `GET /alertes/{id}` | `AlerteDto` (id, beneficiaryId, type, gravite, dateDeclenchement, statut) |
 | `ProtocolRequest` | `GET /protocoles/type/{type}` | `ProtocolDto` (id, type, etapes, niveauPriorite) |
+| `UtilisateurRequest` | `GET /utilisateurs/{id}` | `UtilisateurDto` (id, nom, email, role, actif) |
+
+Le chemin `/utilisateurs/{id}` et le nom du rôle (`ASSISTANT`) sont à confirmer avec le responsable de service-utilisateurs : ils sont isolés dans `UtilisateurRequest` et `InterventionService.verifierAssistant`.
 
 **Création contrôlée** (`POST /interventions/new`), dans cet ordre :
 
@@ -190,7 +199,8 @@ Le service appelle `service-alertes` grâce à deux clients OpenFeign typés (`A
 | 3 | L'alerte est `DECLENCHEE` | `409` |
 | 4 | Le protocole du type de l'alerte existe | `404` « Ressource externe introuvable » |
 | 5 | Le type du protocole correspond au type de l'alerte | `409` |
-| 6 | Création, statut `AFFECTEE` | `201` |
+| 6 | L'assistant existe chez service-utilisateurs, il est actif et a le rôle `ASSISTANT` | `404` si introuvable, `409` sinon |
+| 7 | Création, statut `AFFECTEE` | `201` |
 
 **Idempotence** : l'`alertId` sert de clé. Il est unique en base, et sa présence est vérifiée avant tout appel externe : une même alerte ne peut donner lieu qu'à une seule intervention.
 
@@ -207,7 +217,7 @@ Le service appelle `service-alertes` grâce à deux clients OpenFeign typés (`A
 
 ```json
 {
-  "id": 1, "alertId": 1000, "assistantNom": "Karim Benali",
+  "id": 1, "alertId": 1000, "assistantId": 1,
   "heureArrivee": null, "compteRendu": null, "statut": "AFFECTEE",
   "alerteType": "CHUTE", "alerteGravite": "HAUTE", "alerteStatut": "DECLENCHEE",
   "protocoleEtapes": "1. Appeler les secours 2. Securiser la personne 3. Prevenir la famille",
@@ -221,7 +231,7 @@ Le service échange des événements JSON avec Kafka (port 9092). La configurati
 
 | Topic | Sens | Rôle |
 |---|---|---|
-| `alert-triggered` | Reçu | Création d'une intervention liée à `alertId`, avec un assistant d'astreinte pris dans une liste fictive |
+| `alert-triggered` | Reçu | Création d'une intervention liée à `alertId`, avec un assistant d'astreinte pris, pour l'instant, dans une liste provisoire d'identifiants (1 à 4) |
 | `intervention-assigned` | Publié | Après l'affectation de l'assistant |
 | `emergency-resolved` | Publié | Après la clôture de l'intervention |
 
@@ -232,7 +242,7 @@ alert-triggered (reçu) :
 { "alertId": 1000, "beneficiaryId": 1, "type": "CHUTE", "gravite": "HAUTE", "dateDeclenchement": "2026-11-09T10:15:30" }
 
 intervention-assigned (publié) :
-{ "eventId": "<uuid>", "interventionId": 1, "alertId": 1000, "beneficiaryId": 1, "assistantNom": "Karim Benali", "dateAffectation": "2026-11-09T10:15:32" }
+{ "eventId": "<uuid>", "interventionId": 1, "alertId": 1000, "beneficiaryId": 1, "assistantId": 1, "dateAffectation": "2026-11-09T10:15:32" }
 
 emergency-resolved (publié) :
 { "eventId": "<uuid>", "interventionId": 1, "alertId": 1000, "beneficiaryId": 1, "compteRendu": "...", "dateCloture": "2026-11-09T11:02:10" }
@@ -280,9 +290,9 @@ docker exec -it kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-serve
 
 Puis saisir : `5001:{"alertId":5001,"beneficiaryId":1,"type":"CHUTE","gravite":"HAUTE"}`. Le renvoyer une deuxième fois : une seule intervention existe pour cet `alertId`.
 
-### 5.5 Résilience des appels vers service-alertes (jalon v6.0)
+### 5.5 Résilience des appels Feign (jalon v6.0)
 
-Les deux appels OpenFeign vers `service-alertes` (`AlerteRequest` et `ProtocolRequest`) passent par la classe `ResilientRequests`, qui ajoute la couche de protection. Un RateLimiter protège aussi la consultation enrichie. Les propriétés sont dans `config-repo/service-interventions.properties`.
+Les appels OpenFeign vers `service-alertes` (`AlerteRequest` et `ProtocolRequest`) et vers `service-utilisateurs` (`UtilisateurRequest`) passent par la classe `ResilientRequests`, qui ajoute la couche de protection. L'appel à service-utilisateurs a ses propres réglages (`utilisateurs-service`, identiques à ceux du protocole) et n'a pas de valeur de repli : sans réponse, la création est refusée en `503`, car un assistant ne doit jamais être accepté par défaut. Un RateLimiter protège aussi la consultation enrichie. Les propriétés sont dans `config-repo/service-interventions.properties`.
 
 | Mécanisme | Emplacement | Réglage |
 |---|---|---|
@@ -325,7 +335,7 @@ Sont considérés comme une indisponibilité : un circuit ouvert, une erreur de 
 
 La collection Postman est dans [`postman/service-interventions.postman_collection.json`](postman/service-interventions.postman_collection.json).
 
-1. Démarrer Eureka, le Config Server et `service-alertes` (ou une simulation exposant les mêmes adresses), puis le service (port 8083).
+1. Démarrer Eureka, le Config Server, `service-alertes` et `service-utilisateurs` (ou des simulations exposant les mêmes adresses), puis le service (port 8083).
 2. Dans Postman : **Import** puis choisir le fichier de la collection.
 3. Clic droit sur la collection → **Run collection**.
 
@@ -334,7 +344,7 @@ La collection Postman est dans [`postman/service-interventions.postman_collectio
 | Dossier | Couverture |
 |---|---|
 | 1 — Cas valides | Cycle complet : création, consultation, arrivée, compte-rendu, clôture, filtre |
-| 2 — Erreurs de validation | Corps invalide, JSON cassé, statut inconnu, `assistantNom` vide (`400`) |
+| 2 — Erreurs de validation | Corps invalide, JSON cassé, statut inconnu, `assistantId` absent (`400`) |
 | 3 — Ressources inexistantes | Identifiant inexistant sur chaque endpoint (`404`) |
 | 4 — Règles métier | Doublon, clôture avant arrivée, double arrivée, modification ou suppression d'une intervention clôturée (`409`), suppression valide (`204`) |
 | 5 — OpenFeign | Alerte introuvable (`404`), alerte non déclenchée (`409`), protocole introuvable (`404`), protocole incompatible (`409`), erreur du service distant (`502`), consultation enrichie (`200`) et intervention inexistante (`404`) |
@@ -354,5 +364,7 @@ Le contenu des messages Kafka se vérifie avec le consommateur console (voir 5.4
 | **v2.0** | Client Eureka : enregistrement du service dans Eureka (statut `UP`) | **Terminé** |
 | **v3.0** | Configuration centralisée : fichier dans `config-repo`, service client du Config Server | **Terminé** |
 | **v4.0** | Communication synchrone : clients OpenFeign, création contrôlée, consultation enrichie, gestion des erreurs de communication | **Terminé** |
+| **v4.1** | Évolution de v4.0 : l'assistant est désigné par `assistantId` (et non plus par son nom), client OpenFeign vers service-utilisateurs, vérification de l'assistant (actif, rôle `ASSISTANT`), instance Resilience4j `utilisateurs-service` | **Terminé** |
 | **v5.0** | Communication asynchrone (Kafka) : publication de `intervention-assigned` et `emergency-resolved`, consommation de `alert-triggered`, idempotence, réessais limités | **Terminé** |
 | **v6.0** | Résilience : délais d'attente, Retry, Circuit Breaker, Bulkhead, cache de repli (Caffeine), RateLimiter, création refusée en `503` et consultation en mode dégradé | **Terminé** |
+| **v7.0** | Kafka : choix de l'assistant dans un référentiel utilisateurs répliqué (à la place de la liste provisoire) | **À faire** |
