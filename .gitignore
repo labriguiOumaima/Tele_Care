@@ -1,0 +1,5 @@
+.idea/
+tele-care-config/
+tele-care-eureka/
+*.iml
+*.log
