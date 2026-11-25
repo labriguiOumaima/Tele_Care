@@ -14,7 +14,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class AlertEventConsumer {
 
-    private static final Logger log = LoggerFactory.getLogger(AlertEventConsumer.class);
+    private static final Logger log =
+            LoggerFactory.getLogger(AlertEventConsumer.class);
 
     private final AlertService alertService;
 
@@ -22,41 +23,74 @@ public class AlertEventConsumer {
         this.alertService = alertService;
     }
 
-    /**
-     * Consomme l'événement intervention-assigned :
-     * Fait passer l'alerte à PRISE_EN_CHARGE
-     */
-    @KafkaListener(topics = "intervention-assigned", groupId = "alertes-group", autoStartup = "${spring.kafka.listener.auto-startup:false}")
-    public AlertResponseDTO onInterventionAssigned(InterventionAssignedEvent event) {
-        log.info("[KAFKA REÇU] intervention-assigned pour alertId={}, interventionId={}, assistantId={}",
-                event.getAlertId(), event.getInterventionId(), event.getAssistantId());
+    @KafkaListener(
+            topics = "intervention-assigned",
+            groupId = "alertes-group",
+            autoStartup = "true",
+            properties = {
+                    "spring.json.value.default.type=com.assistance.alertes.dto.event.InterventionAssignedEvent",
+                    "spring.json.use.type.headers=false"
+            }
+    )
+    public AlertResponseDTO onInterventionAssigned(
+            InterventionAssignedEvent event) {
+
+        log.info(
+                "[KAFKA RECU] intervention-assigned : alertId={}, interventionId={}, assistantId={}",
+                event.getAlertId(),
+                event.getInterventionId(),
+                event.getAssistantId()
+        );
 
         AlertStatusUpdateDTO updateDTO = AlertStatusUpdateDTO.builder()
                 .statut(AlertStatus.PRISE_EN_CHARGE)
                 .build();
 
-        AlertResponseDTO updated = alertService.updateAlertStatus(event.getAlertId(), updateDTO);
-        log.info("[CYCLE DE VIE] Alerte id={} mise à jour vers {}", updated.getId(), updated.getStatut());
+        AlertResponseDTO updated =
+                alertService.updateAlertStatus(event.getAlertId(), updateDTO);
+
+        log.info(
+                "[CYCLE DE VIE] Alerte id={} : {}",
+                updated.getId(),
+                updated.getStatut()
+        );
+
         return updated;
     }
 
-    /**
-     * Consomme l'événement emergency-resolved :
-     * Fait passer l'alerte à RESOLUE et enregistre le compte-rendu d'intervention
-     */
-    @KafkaListener(topics = "emergency-resolved", groupId = "alertes-group", autoStartup = "${spring.kafka.listener.auto-startup:false}")
-    public AlertResponseDTO onEmergencyResolved(EmergencyResolvedEvent event) {
-        log.info("[KAFKA REÇU] emergency-resolved pour alertId={}, interventionId={}",
-                event.getAlertId(), event.getInterventionId());
+    @KafkaListener(
+            topics = "emergency-resolved",
+            groupId = "alertes-group",
+            autoStartup = "true",
+            properties = {
+                    "spring.json.value.default.type=com.assistance.alertes.dto.event.EmergencyResolvedEvent",
+                    "spring.json.use.type.headers=false"
+            }
+    )
+    public AlertResponseDTO onEmergencyResolved(
+            EmergencyResolvedEvent event) {
+
+        log.info(
+                "[KAFKA RECU] emergency-resolved : alertId={}, interventionId={}",
+                event.getAlertId(),
+                event.getInterventionId()
+        );
 
         AlertStatusUpdateDTO updateDTO = AlertStatusUpdateDTO.builder()
                 .statut(AlertStatus.RESOLUE)
                 .compteRendu(event.getCompteRendu())
                 .build();
 
-        AlertResponseDTO updated = alertService.updateAlertStatus(event.getAlertId(), updateDTO);
-        log.info("[CYCLE DE VIE] Alerte id={} clôturée vers {} avec compte-rendu: '{}'",
-                updated.getId(), updated.getStatut(), updated.getCompteRendu());
+        AlertResponseDTO updated =
+                alertService.updateAlertStatus(event.getAlertId(), updateDTO);
+
+        log.info(
+                "[CYCLE DE VIE] Alerte id={} : {}, compte-rendu={}",
+                updated.getId(),
+                updated.getStatut(),
+                updated.getCompteRendu()
+        );
+
         return updated;
     }
 }
