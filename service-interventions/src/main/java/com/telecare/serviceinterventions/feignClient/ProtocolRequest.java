@@ -7,6 +7,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 @FeignClient(name = "service-alertes", contextId = "protocolRequest")
 public interface ProtocolRequest {
 
-    @GetMapping("/protocoles/type/{type}")
+    @GetMapping("/api/protocols/type/{type}")
     ProtocolDto getProtocolByType(@PathVariable("type") String type);
 }

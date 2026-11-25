@@ -7,6 +7,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 @FeignClient(name = "service-alertes", contextId = "alerteRequest")
 public interface AlerteRequest {
 
-    @GetMapping("/alertes/{id}")
+    @GetMapping("/api/alerts/{id}")
     AlerteDto getAlerteById(@PathVariable("id") Long id);
 }
