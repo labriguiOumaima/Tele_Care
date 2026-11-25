@@ -1,0 +1,100 @@
+server:
+  port: 8082
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: service-alertes
+  config:
+    import: "optional:configserver:http://localhost:8888"
+  datasource:
+    url: jdbc:h2:mem:alertesdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+      settings:
+        web-allow-others: true
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    listener:
+      auto-startup: false
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        max.block.ms: 500
+    consumer:
+      group-id: alertes-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.assistance.alertes.dto.event,com.assistance.*"
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    register-with-eureka: true
+    fetch-registry: true
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${server.port}:${random.value}
+    lease-renewal-interval-in-seconds: 10
+    lease-expiration-duration-in-seconds: 30
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+# ── Jalon V6 : OpenFeign & Resilience4j ──
+spring:
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connectTimeout: 1000
+            readTimeout: 2000
+
+resilience4j:
+  retry:
+    instances:
+      beneficiaires-service:
+        max-attempts: 3
+        wait-duration: 500ms
+  circuitbreaker:
+    instances:
+      beneficiaires-service:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 6
+        minimum-number-of-calls: 4
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 5s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+
+logging:
+  level:
+    com.assistance.alertes: INFO
+    org.apache.kafka: ERROR
+    org.springframework.kafka: ERROR

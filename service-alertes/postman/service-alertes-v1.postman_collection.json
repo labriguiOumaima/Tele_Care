@@ -1,0 +1,515 @@
+{
+	"info": {
+		"_postman_id": "e49f8e56-829d-4861-91d1-678280f2d999",
+		"name": "Service Alertes - Phases V1 à V5 (Port 8082, Gateway 8080, Eureka 8761)",
+		"description": "Collection Postman complète pour l'évaluation des Phases V1, V2, V3, V4 et V5 du microservice service-alertes (Personne 2).\n\nValidation V1 :\n- CRUD complet de l'entité Protocol\n- Récupération d'un protocole selon le type d'alerte\n- Déclenchement d'une alerte (statut initial DECLENCHEE)\n- Consultation des alertes avec filtrage par statut\n- Cycle de vie : DECLENCHEE -> PRISE_EN_CHARGE -> RESOLUE\n\nValidation V2 & V3 :\n- Service Discovery : Enregistrement dynamique dans Eureka Server (statut UP)\n- Gateway & Routage : Routage dynamique via Spring Cloud Gateway (Port 8080) avec Load Balancing\n- Config Server : Chargement effectif des configurations externalisées\n\nValidation V4 :\n- OpenFeign : Communication synchrone inter-services (service-beneficiaires)\n- Consultation enrichie : Endpoint /api/alerts/{id}/enriched\n\nValidation V5 :\n- Événements asynchrones Kafka (alert-triggered, intervention-assigned, emergency-resolved)\n- Injection et simulation d'événements pour validation du cycle de vie en autonomie",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8082",
+			"type": "string"
+		},
+		{
+			"key": "gatewayUrl",
+			"value": "http://localhost:8080",
+			"type": "string"
+		},
+		{
+			"key": "eurekaUrl",
+			"value": "http://localhost:8761",
+			"type": "string"
+		},
+		{
+			"key": "configUrl",
+			"value": "http://localhost:8888",
+			"type": "string"
+		},
+		{
+			"key": "dynamicAlertId",
+			"value": "1",
+			"type": "string"
+		},
+		{
+			"key": "asyncAlertId",
+			"value": "1",
+			"type": "string"
+		},
+		{
+			"key": "createdProtocolId",
+			"value": "1",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "1 - Protocoles (Direct 8082)",
+			"item": [
+				{
+					"name": "1.1 - Créer un nouveau protocole",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201 Created\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"pm.test(\"Protocole créé avec succès\", function () {",
+									"    pm.expect(jsonData.id).to.be.a('number');",
+									"    pm.expect(jsonData.type).to.eql(\"FUITE_DE_GAZ\");",
+									"    pm.expect(jsonData.niveauPriorite).to.eql(5);",
+									"});",
+									"pm.collectionVariables.set(\"createdProtocolId\", jsonData.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"type\": \"FUITE_DE_GAZ\",\n    \"etapes\": \"1. Évacuer le logement immédiatement. 2. Couper l'arrivée générale si accessible sans danger. 3. Appeler les pompiers (18) et Gaz de France. 4. Prévenir le contact d'urgence.\",\n    \"niveauPriorite\": 5\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/protocols",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "protocols"]
+						}
+					}
+				},
+				{
+					"name": "1.2 - Consulter tous les protocoles",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"pm.test(\"Liste de protocoles non vide\", function () {",
+									"    pm.expect(jsonData).to.be.an('array');",
+									"    pm.expect(jsonData.length).to.be.above(0);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/protocols",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "protocols"]
+						}
+					}
+				},
+				{
+					"name": "1.3 - Consulter protocole par Type (CHUTE)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"pm.test(\"Protocole CHUTE trouvé\", function () {",
+									"    pm.expect(jsonData.type).to.eql(\"CHUTE\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/protocols/type/CHUTE",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "protocols", "type", "CHUTE"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "2 - Déclenchement d'Alertes (Direct 8082)",
+			"item": [
+				{
+					"name": "2.1 - Déclencher une alerte (CHUTE)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201 Created\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"pm.test(\"Alerte déclenchée avec statut DECLENCHEE\", function () {",
+									"    pm.expect(jsonData.id).to.be.a('number');",
+									"    pm.expect(jsonData.statut).to.eql(\"DECLENCHEE\");",
+									"    pm.expect(jsonData.beneficiaryId).to.eql(10);",
+									"});",
+									"pm.collectionVariables.set(\"dynamicAlertId\", jsonData.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"beneficiaryId\": 10,\n    \"type\": \"CHUTE\",\n    \"gravite\": \"ELEVEE\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/alerts",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "alerts"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "3 - Consultation & Filtres (Direct 8082)",
+			"item": [
+				{
+					"name": "3.1 - Consulter toutes les alertes",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/alerts",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "alerts"]
+						}
+					}
+				},
+				{
+					"name": "3.2 - Filtrer par statut DECLENCHEE",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"jsonData.forEach(function(alert) {",
+									"    pm.expect(alert.statut).to.eql(\"DECLENCHEE\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/alerts?statut=DECLENCHEE",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "alerts"],
+							"query": [
+								{
+									"key": "statut",
+									"value": "DECLENCHEE"
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "6 - Services de Base V2 & V3 (Eureka, Gateway 8080 & Config Server)",
+			"item": [
+				{
+					"name": "6.1 - Service Discovery : Statut SERVICE-ALERTES dans Eureka",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"pm.test(\"Application SERVICE-ALERTES enregistrée avec statut UP\", function () {",
+									"    pm.expect(jsonData.application.name).to.eql(\"SERVICE-ALERTES\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{eurekaUrl}}/eureka/apps/SERVICE-ALERTES",
+							"host": ["{{eurekaUrl}}"],
+							"path": ["eureka", "apps", "SERVICE-ALERTES"]
+						}
+					}
+				},
+				{
+					"name": "6.2 - Gateway : Consulter les protocoles (Routage dynamique)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{gatewayUrl}}/api/protocols",
+							"host": ["{{gatewayUrl}}"],
+							"path": ["api", "protocols"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "7 - Consultation Enrichie & OpenFeign (Phase V4)",
+			"item": [
+				{
+					"name": "7.1 - Consultation Alerte Enrichie (Direct 8082)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"pm.test(\"Alerte enrichie complète avec protocole, bénéficiaire et contacts\", function () {",
+									"    pm.expect(jsonData.id).to.eql(1);",
+									"    pm.expect(jsonData.protocol).to.not.be.null;",
+									"    pm.expect(jsonData.beneficiary).to.not.be.null;",
+									"    pm.expect(jsonData.emergencyContacts).to.be.an('array');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/alerts/1/enriched",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "alerts", "1", "enriched"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "8 - Traitements Asynchrones & Événements Kafka (Phase V5)",
+			"item": [
+				{
+					"name": "8.1 - Déclencher une alerte (Publication de alert-triggered)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201 Created\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"pm.test(\"Alerte créée en statut initial DECLENCHEE\", function () {",
+									"    pm.expect(jsonData.statut).to.eql(\"DECLENCHEE\");",
+									"});",
+									"pm.collectionVariables.set(\"asyncAlertId\", jsonData.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"beneficiaryId\": 55,\n    \"type\": \"MALAISE\",\n    \"gravite\": \"CRITIQUE\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/alerts",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "alerts"]
+						}
+					}
+				},
+				{
+					"name": "8.2 - Injection événement intervention-assigned -> PRISE_EN_CHARGE",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"pm.test(\"Alerte automatiquement passée à PRISE_EN_CHARGE par événement\", function () {",
+									"    pm.expect(jsonData.statut).to.eql(\"PRISE_EN_CHARGE\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"alertId\": {{asyncAlertId}},\n    \"interventionId\": 801,\n    \"assistantId\": 15\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/alerts/simulation/inject-intervention-assigned",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "alerts", "simulation", "inject-intervention-assigned"]
+						}
+					}
+				},
+				{
+					"name": "8.3 - Injection événement emergency-resolved -> RESOLUE",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"pm.test(\"Alerte automatiquement passée à RESOLUE avec compte-rendu\", function () {",
+									"    pm.expect(jsonData.statut).to.eql(\"RESOLUE\");",
+									"    pm.expect(jsonData.compteRendu).to.include(\"Intervention de secours achevée\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"alertId\": {{asyncAlertId}},\n    \"interventionId\": 801,\n    \"compteRendu\": \"Intervention de secours achevée à 16h45. Bénéficiaire stabilisé et pris en charge.\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/alerts/simulation/inject-emergency-resolved",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "alerts", "simulation", "inject-emergency-resolved"]
+						}
+					}
+				},
+				{
+					"name": "8.4 - Vérification état final de l'alerte clôturée",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"pm.test(\"Statut persisté en base: RESOLUE\", function () {",
+									"    pm.expect(jsonData.statut).to.eql(\"RESOLUE\");",
+									"    pm.expect(jsonData.compteRendu).to.not.be.empty;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/alerts/{{asyncAlertId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "alerts", "{{asyncAlertId}}"]
+						}
+					}
+				}
+			]
+		}
+	]
+}
