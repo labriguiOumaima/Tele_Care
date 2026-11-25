@@ -8,6 +8,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 public interface UtilisateurRequest {
 
     // Chemin supposé : à confirmer avec la Personne 4
-    @GetMapping("/utilisateurs/{id}")
+    @GetMapping("/api/utilisateurs/{id}")
     UtilisateurDto getUtilisateurById(@PathVariable("id") Long id);
 }

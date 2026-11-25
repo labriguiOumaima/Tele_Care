@@ -1,6 +1,6 @@
 package com.assistance.alertes.service;
 
-import com.assistance.alertes.client.BeneficiaryClient;
+import com.assistance.alertes.client.ResilientBeneficiaryClient;
 import com.assistance.alertes.client.BeneficiaryClientFallback;
 import com.assistance.alertes.dto.feign.BeneficiaryDTO;
 import com.assistance.alertes.dto.feign.ContactDTO;
@@ -36,14 +36,14 @@ public class AlertService {
     private static final Logger log = LoggerFactory.getLogger(AlertService.class);
 
     private final AlertRepository alertRepository;
-    private final ProtocolRepository protocolRepository;
-    private final BeneficiaryClient beneficiaryClient;
+    private final ResilientBeneficiaryClient beneficiaryClient;    private final ProtocolRepository protocolRepository;
+
     private final BeneficiaryClientFallback beneficiaryClientFallback;
     private final AlertEventPublisher alertEventPublisher;
 
     public AlertService(AlertRepository alertRepository,
                         ProtocolRepository protocolRepository,
-                        BeneficiaryClient beneficiaryClient,
+                        ResilientBeneficiaryClient beneficiaryClient,
                         BeneficiaryClientFallback beneficiaryClientFallback,
                         AlertEventPublisher alertEventPublisher) {
         this.alertRepository = alertRepository;
