@@ -26,6 +26,9 @@ public class Notification {
 
     private String contactNom;
     private String contactTelephone;
+    private String contactEmail;
+    public String getContactEmail(){return contactEmail;}
+    public void setContactEmail(String email){this.contactEmail=email;}
 
     @Column(length = 2000)
     private String message;

@@ -6,6 +6,7 @@ public class InterventionAssignedEvent {
     private Long alertId;
     private Long interventionId;
     private Long assistantId;
+    @com.fasterxml.jackson.annotation.JsonFormat(shape = com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING)
     private LocalDateTime timestamp;
 
     public InterventionAssignedEvent() {
@@ -58,7 +59,8 @@ public class InterventionAssignedEvent {
         private Long alertId;
         private Long interventionId;
         private Long assistantId;
-        private LocalDateTime timestamp;
+        @com.fasterxml.jackson.annotation.JsonFormat(shape = com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING)
+    private LocalDateTime timestamp;
 
         public Builder alertId(Long alertId) {
             this.alertId = alertId;

@@ -16,9 +16,23 @@ import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest
+@org.springframework.test.context.ActiveProfiles("test")
+@SpringBootTest(properties={"spring.cloud.config.enabled=false","spring.config.import="})
 @Transactional
 class EventConsumerTest {
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private com.assistance.alertes.client.ResilientBeneficiaryClient beneficiaryClient;
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private com.assistance.alertes.event.AlertEventPublisher eventPublisher;
+
+    @org.junit.jupiter.api.BeforeEach
+    void remoteFixtures() {
+        org.mockito.Mockito.when(beneficiaryClient.getBeneficiaryById(org.mockito.ArgumentMatchers.anyLong()))
+            .thenAnswer(inv -> new com.assistance.alertes.dto.feign.BeneficiaryDTO(inv.getArgument(0), "M. Robert Martin", 84, "Adresse test", "Pathologie test", "0600000000"));
+        org.mockito.Mockito.when(beneficiaryClient.getContactsByBeneficiaryId(org.mockito.ArgumentMatchers.anyLong()))
+            .thenAnswer(inv -> java.util.List.of(new com.assistance.alertes.dto.feign.ContactDTO(1L, inv.getArgument(0), "Claire Martin", "Fille", "0600000001")));
+    }
 
     @Autowired
     private AlertService alertService;

@@ -1,7 +1,6 @@
 package com.assistance.alertes.service;
 
 import com.assistance.alertes.client.ResilientBeneficiaryClient;
-import com.assistance.alertes.client.BeneficiaryClientFallback;
 import com.assistance.alertes.dto.feign.BeneficiaryDTO;
 import com.assistance.alertes.dto.feign.ContactDTO;
 import com.assistance.alertes.dto.request.AlertCreateDTO;
@@ -38,18 +37,15 @@ public class AlertService {
     private final AlertRepository alertRepository;
     private final ResilientBeneficiaryClient beneficiaryClient;    private final ProtocolRepository protocolRepository;
 
-    private final BeneficiaryClientFallback beneficiaryClientFallback;
     private final AlertEventPublisher alertEventPublisher;
 
     public AlertService(AlertRepository alertRepository,
                         ProtocolRepository protocolRepository,
                         ResilientBeneficiaryClient beneficiaryClient,
-                        BeneficiaryClientFallback beneficiaryClientFallback,
                         AlertEventPublisher alertEventPublisher) {
         this.alertRepository = alertRepository;
         this.protocolRepository = protocolRepository;
         this.beneficiaryClient = beneficiaryClient;
-        this.beneficiaryClientFallback = beneficiaryClientFallback;
         this.alertEventPublisher = alertEventPublisher;
     }
 
@@ -168,6 +164,8 @@ public class AlertService {
         AlertStatus currentStatus = alert.getStatut();
         AlertStatus newStatus = request.getStatut();
 
+        if (currentStatus == newStatus) return mapToResponse(alert);
+
         if (currentStatus == AlertStatus.RESOLUE) {
             throw new BadRequestException("Une alerte résolue ne peut plus changer de statut.");
         }
@@ -211,37 +209,14 @@ public class AlertService {
                 .build();
     }
 
-    /**
-     * Appel Feign résilient avec Circuit Breaker et Retry (Jalon V6)
-     * Bascule automatique vers le fallback en cas d'indisponibilité de service-beneficiaires.
-     */
-    @CircuitBreaker(name = "beneficiaires-service", fallbackMethod = "fallbackBeneficiary")
-    @Retry(name = "beneficiaires-service")
     public BeneficiaryDTO getBeneficiarySafe(Long id) {
-        BeneficiaryDTO b = beneficiaryClient.getBeneficiaryById(id);
-        if (b != null) {
-            return b;
-        }
-        return beneficiaryClientFallback.getBeneficiaryById(id);
+        BeneficiaryDTO beneficiary = beneficiaryClient.getBeneficiaryById(id);
+        if (beneficiary == null) throw new ResourceNotFoundException("Beneficiaire introuvable : " + id);
+        return beneficiary;
     }
 
-    public BeneficiaryDTO fallbackBeneficiary(Long id, Throwable t) {
-        log.warn("[RESILIENCE4J] Circuit Breaker / Retry activé sur getBeneficiarySafe(id={}) : {}", id, t.getMessage());
-        return beneficiaryClientFallback.getBeneficiaryById(id);
-    }
-
-    @CircuitBreaker(name = "beneficiaires-service", fallbackMethod = "fallbackContacts")
-    @Retry(name = "beneficiaires-service")
     public List<ContactDTO> getContactsSafe(Long id) {
         List<ContactDTO> contacts = beneficiaryClient.getContactsByBeneficiaryId(id);
-        if (contacts != null && !contacts.isEmpty()) {
-            return contacts;
-        }
-        return beneficiaryClientFallback.getContactsByBeneficiaryId(id);
-    }
-
-    public List<ContactDTO> fallbackContacts(Long id, Throwable t) {
-        log.warn("[RESILIENCE4J] Circuit Breaker / Retry activé sur getContactsSafe(id={}) : {}", id, t.getMessage());
-        return beneficiaryClientFallback.getContactsByBeneficiaryId(id);
+        return contacts == null ? List.of() : contacts;
     }
 }

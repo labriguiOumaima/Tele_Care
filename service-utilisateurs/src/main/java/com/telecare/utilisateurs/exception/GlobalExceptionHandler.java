@@ -75,6 +75,11 @@ public class GlobalExceptionHandler {
     /**
      * Toute autre exception non gérée.
      */
+    @ExceptionHandler({IllegalArgumentException.class, org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class, org.springframework.http.converter.HttpMessageNotReadableException.class})
+    public ResponseEntity<ErrorResponse> invalidInput(Exception ex) {
+        return ResponseEntity.badRequest().body(new ErrorResponse(400,"REQUETE_INVALIDE",ex.getMessage(),LocalDateTime.now()));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneral(Exception ex) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

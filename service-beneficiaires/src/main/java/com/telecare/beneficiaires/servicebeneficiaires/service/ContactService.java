@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import tools.jackson.databind.json.JsonMapper;
+import com.telecare.beneficiaires.servicebeneficiaires.util.JsonCodec;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -29,7 +29,7 @@ public class ContactService {
     private final BeneficiaryRepository beneficiaryRepository;
     private final ContactCreationRepository creationRepository;
 
-    private final JsonMapper jsonMapper = JsonMapper.builder().build();
+    private final JsonCodec jsonMapper = new JsonCodec();
 
     public ContactService(
             ContactRepository contactRepository,
@@ -151,6 +151,7 @@ public class ContactService {
         contact.setNom(request.nom());
         contact.setLien(request.lien());
         contact.setTelephone(request.telephone());
+        contact.setEmail(request.email());
     }
 
     private ContactResponse toResponse(Contact contact) {
@@ -159,7 +160,8 @@ public class ContactService {
                 contact.getBeneficiaryId(),
                 contact.getNom(),
                 contact.getLien(),
-                contact.getTelephone()
+                contact.getTelephone(),
+                contact.getEmail()
         );
     }
 

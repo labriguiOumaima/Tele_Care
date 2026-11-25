@@ -13,6 +13,14 @@ public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    @ExceptionHandler(org.springframework.web.bind.MethodArgumentNotValidException.class)
+    public ResponseEntity<java.util.Map<String,Object>> validation(org.springframework.web.bind.MethodArgumentNotValidException ex) {
+        var errors=new java.util.LinkedHashMap<String,String>();
+        ex.getBindingResult().getFieldErrors().forEach(e->errors.put(e.getField(),e.getDefaultMessage()));
+        return ResponseEntity.badRequest().body(java.util.Map.of("status",400,"errors",errors));
+    }
+    @ExceptionHandler({org.springframework.http.converter.HttpMessageNotReadableException.class,org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class})
+    public ResponseEntity<String> invalid(Exception ex){return ResponseEntity.badRequest().body("Requete invalide");}
     @ExceptionHandler(FeignException.NotFound.class)
     public ResponseEntity<String> notFound(FeignException.NotFound ex) {
         return ResponseEntity.status(404).body("Ressource externe introuvable");

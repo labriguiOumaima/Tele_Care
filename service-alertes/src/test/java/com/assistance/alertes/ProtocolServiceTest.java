@@ -14,7 +14,8 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest
+@org.springframework.test.context.ActiveProfiles("test")
+@SpringBootTest(properties={"spring.cloud.config.enabled=false","spring.config.import="})
 @Transactional
 class ProtocolServiceTest {
 

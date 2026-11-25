@@ -22,11 +22,15 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final ResilientRequests resilientRequests;
+    private final org.springframework.mail.javamail.JavaMailSender mailSender;
+    @org.springframework.beans.factory.annotation.Value("${app.mail.from:telecare@localhost.test}")
+    private String from;
 
     public NotificationService(NotificationRepository notificationRepository,
-                               ResilientRequests resilientRequests) {
+                               ResilientRequests resilientRequests, org.springframework.mail.javamail.JavaMailSender mailSender) {
         this.notificationRepository = notificationRepository;
         this.resilientRequests = resilientRequests;
+        this.mailSender = mailSender;
     }
 
     // --- Consultation ---
@@ -58,7 +62,7 @@ public class NotificationService {
                 event.alertId(), event.interventionId(), event.beneficiaryId(), message);
     }
 
-    private void traiter(String eventId, TypeNotification type, Long alertId,
+    private synchronized void traiter(String eventId, TypeNotification type, Long alertId,
                          Long interventionId, Long beneficiaryId, String message) {
         if (eventId == null || beneficiaryId == null) {
             log.error("Evenement {} ignore : eventId ou beneficiaryId manquant (alertId {})", type, alertId);
@@ -79,9 +83,16 @@ public class NotificationService {
             return;
         }
         // Un contact n'a pas d'indicateur "de confiance" : on prend le premier
-        ContactDto contact = contacts.get(0);
+        ContactDto contact = contacts.stream().filter(c -> c.email() != null && !c.email().isBlank()).findFirst()
+            .orElseThrow(() -> new IllegalStateException("Aucun contact avec email pour le beneficiaire " + beneficiaryId));
+        org.springframework.mail.SimpleMailMessage mail = new org.springframework.mail.SimpleMailMessage();
+        mail.setFrom(from);
+        mail.setTo(contact.email());
+        mail.setSubject("Tele-Care : " + type + " / alerte " + alertId);
+        mail.setText(message);
+        mailSender.send(mail);
 
-        // 3. Envoi (simule : trace dans les logs et en base) puis enregistrement
+        // 3. Envoi SMTP puis enregistrement apres confirmation du serveur SMTP
         Notification notification = new Notification();
         notification.setEventId(eventId);
         notification.setType(type);
@@ -90,6 +101,7 @@ public class NotificationService {
         notification.setBeneficiaryId(beneficiaryId);
         notification.setContactNom(contact.nom());
         notification.setContactTelephone(contact.telephone());
+        notification.setContactEmail(contact.email());
         notification.setMessage(message);
         notification.setDateEnvoi(LocalDateTime.now());
         notificationRepository.save(notification);

@@ -6,6 +6,7 @@ public class EmergencyResolvedEvent {
     private Long alertId;
     private Long interventionId;
     private String compteRendu;
+    @com.fasterxml.jackson.annotation.JsonFormat(shape = com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING)
     private LocalDateTime timestamp;
 
     public EmergencyResolvedEvent() {
@@ -58,7 +59,8 @@ public class EmergencyResolvedEvent {
         private Long alertId;
         private Long interventionId;
         private String compteRendu;
-        private LocalDateTime timestamp;
+        @com.fasterxml.jackson.annotation.JsonFormat(shape = com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING)
+    private LocalDateTime timestamp;
 
         public Builder alertId(Long alertId) {
             this.alertId = alertId;

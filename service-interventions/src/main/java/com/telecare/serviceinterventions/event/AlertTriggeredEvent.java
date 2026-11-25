@@ -8,6 +8,6 @@ public record AlertTriggeredEvent(
         Long beneficiaryId,
         String type,
         String gravite,
-        String dateDeclenchement
+        java.time.LocalDateTime dateDeclenchement
 ) {
 }

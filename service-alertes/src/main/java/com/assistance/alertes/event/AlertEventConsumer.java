@@ -26,7 +26,7 @@ public class AlertEventConsumer {
     @KafkaListener(
             topics = "intervention-assigned",
             groupId = "alertes-group",
-            autoStartup = "true",
+            autoStartup = "${spring.kafka.listener.auto-startup:true}",
             properties = {
                     "spring.json.value.default.type=com.assistance.alertes.dto.event.InterventionAssignedEvent",
                     "spring.json.use.type.headers=false"
@@ -42,6 +42,8 @@ public class AlertEventConsumer {
                 event.getAssistantId()
         );
 
+        AlertResponseDTO current = alertService.getAlertById(event.getAlertId());
+        if (current.getStatut() == AlertStatus.RESOLUE) return current;
         AlertStatusUpdateDTO updateDTO = AlertStatusUpdateDTO.builder()
                 .statut(AlertStatus.PRISE_EN_CHARGE)
                 .build();
@@ -61,7 +63,7 @@ public class AlertEventConsumer {
     @KafkaListener(
             topics = "emergency-resolved",
             groupId = "alertes-group",
-            autoStartup = "true",
+            autoStartup = "${spring.kafka.listener.auto-startup:true}",
             properties = {
                     "spring.json.value.default.type=com.assistance.alertes.dto.event.EmergencyResolvedEvent",
                     "spring.json.use.type.headers=false"

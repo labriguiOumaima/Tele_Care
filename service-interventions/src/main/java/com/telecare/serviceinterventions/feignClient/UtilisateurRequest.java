@@ -10,4 +10,6 @@ public interface UtilisateurRequest {
     // Chemin supposé : à confirmer avec la Personne 4
     @GetMapping("/api/utilisateurs/{id}")
     UtilisateurDto getUtilisateurById(@PathVariable("id") Long id);
+    @GetMapping("/api/utilisateurs/assistants-actifs")
+    java.util.List<UtilisateurDto> getAssistantsActifs();
 }

@@ -36,6 +36,13 @@ public class UtilisateurController {
                 .body(cree);
     }
 
+    @GetMapping("/assistants-actifs")
+    public java.util.List<UtilisateurResponseDto> assistantsActifs() {
+        return utilisateurService.afficherTous().stream()
+                .filter(u -> u.isActif() && "ASSISTANT".equalsIgnoreCase(u.getRole()))
+                .toList();
+    }
+
     /**
      * Consultation paginée des utilisateurs.
      */

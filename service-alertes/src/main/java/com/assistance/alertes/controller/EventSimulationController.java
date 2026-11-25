@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
  * Permet d'injecter des événements fictifs simulant le service service-interventions
  * afin de tester et valider les transitions automatiques de cycle de vie.
  */
+@org.springframework.context.annotation.Profile("simulation")
 @RestController
 @RequestMapping("/api/alerts/simulation")
 @CrossOrigin(origins = "*")

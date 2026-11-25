@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.3.5</version>
+        <version>3.5.6</version>
         <relativePath/>
     </parent>
     <groupId>com.assistance</groupId>
@@ -16,11 +16,11 @@
     <description>Microservice de gestion des alertes et des protocoles d'urgence (Port 8082)</description>
 
     <properties>
-        <java.version>21</java.version>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
+        <java.version>17</java.version>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <spring-cloud.version>2023.0.3</spring-cloud.version>
+        <spring-cloud.version>2025.0.0</spring-cloud.version>
     </properties>
 
     <dependencyManagement>
@@ -118,6 +118,7 @@
 
     <build>
         <plugins>
+<plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><configuration><argLine>-javaagent:"${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar" -Xmx512m</argLine></configuration></plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

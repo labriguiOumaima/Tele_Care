@@ -58,35 +58,5 @@ public class DataInitializer implements CommandLineRunner {
             log.info("4 protocoles d'urgence initialisés avec succès.");
         }
 
-        if (alertRepository.count() == 0) {
-            log.info("Initialisation de jeux d'alertes de test pour la validation...");
-            Alert a1 = Alert.builder()
-                    .beneficiaryId(1L)
-                    .type("CHUTE")
-                    .gravite("ELEVEE")
-                    .dateDeclenchement(LocalDateTime.now().minusMinutes(15))
-                    .statut(AlertStatus.DECLENCHEE)
-                    .build();
-
-            Alert a2 = Alert.builder()
-                    .beneficiaryId(2L)
-                    .type("MALAISE")
-                    .gravite("CRITIQUE")
-                    .dateDeclenchement(LocalDateTime.now().minusHours(1))
-                    .statut(AlertStatus.PRISE_EN_CHARGE)
-                    .build();
-
-            Alert a3 = Alert.builder()
-                    .beneficiaryId(3L)
-                    .type("CHUTE")
-                    .gravite("MOYENNE")
-                    .dateDeclenchement(LocalDateTime.now().minusHours(3))
-                    .statut(AlertStatus.RESOLUE)
-                    .compteRendu("Intervention effectuée avec succès. Bénéficiaire relevé sans traumatisme, famille prévenue.")
-                    .build();
-
-            alertRepository.saveAll(List.of(a1, a2, a3));
-            log.info("3 alertes de test avec différents statuts initialisées avec succès.");
-        }
     }
 }

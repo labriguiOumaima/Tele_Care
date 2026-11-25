@@ -5,13 +5,13 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>4.2.0</version>
+		<version>3.5.6</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.telecare</groupId>
 	<artifactId>service-utilisateurs</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name/>
+	<name>service-utilisateurs</name>
 	<description/>
 	<url/>
 	<licenses>
@@ -27,8 +27,8 @@
 		<url/>
 	</scm>
 	<properties>
-		<java.version>21</java.version>
-		<spring-cloud.version>2026.0.0</spring-cloud.version>
+		<java.version>17</java.version>
+		<spring-cloud.version>2025.0.0</spring-cloud.version>
 	</properties>
 	<dependencies>
 		<!-- JPA + H2 -->
@@ -36,7 +36,7 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa</artifactId>
 		</dependency>
-		<!-- H2 console (incluse dans starter-data-jpa en Spring Boot 4) -->
+		<!-- Base H2 dediee -->
 		<dependency>
 			<groupId>com.h2database</groupId>
 			<artifactId>h2</artifactId>
@@ -111,6 +111,7 @@
 
 	<build>
 		<plugins>
+<plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><configuration><argLine>-javaagent:"${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar" -Xmx512m</argLine></configuration></plugin>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>

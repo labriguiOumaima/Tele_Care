@@ -1,0 +1,1123 @@
+{
+  "info": {
+    "name": "TeleCare - parcours de validation",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Pile lancee avec le script. Runner : delai 1500 ms recommande pour les messages Kafka. Les scenarios de panne/restart et SMTP sont automatises par scripts/telecare.py. La derniere partie supprime les donnees de ce parcours."
+  },
+  "variable": [
+    {
+      "key": "usersUrl",
+      "value": "http://localhost:8084"
+    },
+    {
+      "key": "benefUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "alertsUrl",
+      "value": "http://localhost:8082"
+    },
+    {
+      "key": "interventionsUrl",
+      "value": "http://localhost:8083"
+    },
+    {
+      "key": "gatewayUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "username",
+      "value": "admin"
+    },
+    {
+      "key": "password",
+      "value": "admin123"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Initialiser et creer un assistant",
+      "request": {
+        "method": "POST",
+        "url": "{{usersUrl}}/api/utilisateurs",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{runId}}-user"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nom\": \"Assistant test\",\n  \"email\": \"assistant.{{runId}}@example.test\",\n  \"role\": \"ASSISTANT\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{username}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{password}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set(\"runId\", Date.now().toString());"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "if(pm.response.code === 201) pm.collectionVariables.set(\"assistantId\", pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Lister les utilisateurs",
+      "request": {
+        "method": "GET",
+        "url": "{{usersUrl}}/api/utilisateurs",
+        "header": [],
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{username}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{password}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Consulter assistant",
+      "request": {
+        "method": "GET",
+        "url": "{{usersUrl}}/api/utilisateurs/{{assistantId}}",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Modifier assistant",
+      "request": {
+        "method": "PUT",
+        "url": "{{usersUrl}}/api/utilisateurs/{{assistantId}}",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nom\": \"Assistant modifie\",\n  \"email\": \"assistant.{{runId}}@example.test\",\n  \"role\": \"ASSISTANT\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{username}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{password}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Email utilisateur invalide",
+      "request": {
+        "method": "POST",
+        "url": "{{usersUrl}}/api/utilisateurs",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nom\": \"Assistant test\",\n  \"email\": \"bad\",\n  \"role\": \"ASSISTANT\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{username}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{password}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Utilisateur absent",
+      "request": {
+        "method": "GET",
+        "url": "{{usersUrl}}/api/utilisateurs/99999999",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Creer beneficiaire",
+      "request": {
+        "method": "POST",
+        "url": "{{benefUrl}}/beneficiaires",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{runId}}-benef"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nom\": \"Beneficiaire test\",\n  \"age\": 78,\n  \"adresse\": \"Casablanca\",\n  \"pathologie\": \"Test\",\n  \"telephone\": \"0600000000\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "if(pm.response.code === 201) pm.collectionVariables.set(\"beneficiaryId\", pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Rejouer creation beneficiaire",
+      "request": {
+        "method": "POST",
+        "url": "{{benefUrl}}/beneficiaires",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{runId}}-benef"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nom\": \"Beneficiaire test\",\n  \"age\": 78,\n  \"adresse\": \"Casablanca\",\n  \"pathologie\": \"Test\",\n  \"telephone\": \"0600000000\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "pm.test(\"Meme ID\",()=>pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get(\"beneficiaryId\"))));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Cle reutilisee avec autre corps",
+      "request": {
+        "method": "POST",
+        "url": "{{benefUrl}}/beneficiaires",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{runId}}-benef"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nom\": \"Beneficiaire test\",\n  \"age\": 79,\n  \"adresse\": \"Casablanca\",\n  \"pathologie\": \"Test\",\n  \"telephone\": \"0600000000\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 Lister beneficiaires",
+      "request": {
+        "method": "GET",
+        "url": "{{benefUrl}}/beneficiaires",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 Consulter beneficiaire",
+      "request": {
+        "method": "GET",
+        "url": "{{benefUrl}}/beneficiaires/{{beneficiaryId}}",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 Modifier beneficiaire",
+      "request": {
+        "method": "PUT",
+        "url": "{{benefUrl}}/beneficiaires/{{beneficiaryId}}",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nom\": \"Beneficiaire modifie\",\n  \"age\": 78,\n  \"adresse\": \"Casablanca\",\n  \"pathologie\": \"Test\",\n  \"telephone\": \"0600000000\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 Age invalide",
+      "request": {
+        "method": "POST",
+        "url": "{{benefUrl}}/beneficiaires",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{runId}}-invalid"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nom\": \"Beneficiaire test\",\n  \"age\": -1,\n  \"adresse\": \"Casablanca\",\n  \"pathologie\": \"Test\",\n  \"telephone\": \"0600000000\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 Creer contact avec email",
+      "request": {
+        "method": "POST",
+        "url": "{{benefUrl}}/contacts",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{runId}}-contact"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"beneficiaryId\": {{beneficiaryId}},\n  \"nom\": \"Contact test\",\n  \"lien\": \"Famille\",\n  \"telephone\": \"0600000001\",\n  \"email\": \"famille.{{runId}}@example.test\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "if(pm.response.code === 201) pm.collectionVariables.set(\"contactId\", pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "15 Consulter contact",
+      "request": {
+        "method": "GET",
+        "url": "{{benefUrl}}/contacts/{{contactId}}",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "16 Modifier contact",
+      "request": {
+        "method": "PUT",
+        "url": "{{benefUrl}}/contacts/{{contactId}}",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"beneficiaryId\": {{beneficiaryId}},\n  \"nom\": \"Contact modifie\",\n  \"lien\": \"Famille\",\n  \"telephone\": \"0600000001\",\n  \"email\": \"famille.{{runId}}@example.test\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "17 Consulter dossier",
+      "request": {
+        "method": "GET",
+        "url": "{{benefUrl}}/beneficiaires/{{beneficiaryId}}/dossier",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "18 Suppression avec contacts refusee",
+      "request": {
+        "method": "DELETE",
+        "url": "{{benefUrl}}/beneficiaires/{{beneficiaryId}}",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "19 Creer protocole",
+      "request": {
+        "method": "POST",
+        "url": "{{alertsUrl}}/api/protocols",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{runId}}-protocol"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"type\": \"TEST_{{runId}}\",\n  \"etapes\": \"Verifier et informer\",\n  \"niveauPriorite\": 3\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "if(pm.response.code === 201) pm.collectionVariables.set(\"protocolId\", pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "20 Lister protocoles",
+      "request": {
+        "method": "GET",
+        "url": "{{alertsUrl}}/api/protocols",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "21 Modifier protocole",
+      "request": {
+        "method": "PUT",
+        "url": "{{alertsUrl}}/api/protocols/{{protocolId}}",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"type\": \"TEST_{{runId}}\",\n  \"etapes\": \"Etapes modifiees\",\n  \"niveauPriorite\": 3\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "22 Beneficiaire absent : pas de donnees fictives",
+      "request": {
+        "method": "POST",
+        "url": "{{alertsUrl}}/api/alerts",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{runId}}-absent"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"beneficiaryId\": 99999999,\n  \"type\": \"TEST_{{runId}}\",\n  \"gravite\": \"ELEVEE\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "23 Creer alerte",
+      "request": {
+        "method": "POST",
+        "url": "{{alertsUrl}}/api/alerts",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{runId}}-alert"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"beneficiaryId\": {{beneficiaryId}},\n  \"type\": \"TEST_{{runId}}\",\n  \"gravite\": \"ELEVEE\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "if(pm.response.code === 201) pm.collectionVariables.set(\"alertId\", pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "24 Consulter alerte enrichie",
+      "request": {
+        "method": "GET",
+        "url": "{{alertsUrl}}/api/alerts/{{alertId}}/enriched",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Beneficiaire reel\",()=>pm.expect(pm.response.json().beneficiary.id).to.eql(Number(pm.collectionVariables.get(\"beneficiaryId\"))));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "25 Lister interventions apres consommation Kafka",
+      "request": {
+        "method": "GET",
+        "url": "{{interventionsUrl}}/interventions",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "const i=pm.response.json().find(i=>i.alertId===Number(pm.collectionVariables.get(\"alertId\")));",
+              "pm.test(\"Intervention creee par Kafka\",()=>pm.expect(i).to.exist);",
+              "if(i) pm.collectionVariables.set(\"interventionId\",i.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "26 Consulter intervention enrichie",
+      "request": {
+        "method": "GET",
+        "url": "{{interventionsUrl}}/interventions/{{interventionId}}/detail",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "27 Enregistrer arrivee",
+      "request": {
+        "method": "PUT",
+        "url": "{{interventionsUrl}}/interventions/{{interventionId}}/arrivee",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "28 Compte rendu",
+      "request": {
+        "method": "PUT",
+        "url": "{{interventionsUrl}}/interventions/{{interventionId}}/compte-rendu",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"compteRendu\": \"Intervention terminee pour la demonstration\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "29 Cloturer",
+      "request": {
+        "method": "PUT",
+        "url": "{{interventionsUrl}}/interventions/{{interventionId}}/cloture",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "30 Consulter alerte resolue",
+      "request": {
+        "method": "GET",
+        "url": "{{alertsUrl}}/api/alerts/{{alertId}}",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Urgence resolue\",()=>pm.expect(pm.response.json().statut).to.eql(\"RESOLUE\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "31 Gateway vers beneficiaires",
+      "request": {
+        "method": "GET",
+        "url": "{{gatewayUrl}}/service-beneficiaires/beneficiaires",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "31b Notifications affectation et resolution",
+      "request": {
+        "method": "GET",
+        "url": "{{gatewayUrl}}/service-notification/notifications?alertId={{alertId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\",()=>pm.response.to.have.status(200));",
+              "pm.test(\"Deux notifications\",()=>pm.expect(pm.response.json().length).to.eql(2));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "31c Mails SMTP recus dans Mailpit",
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:8025/api/v1/messages"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\",()=>pm.response.to.have.status(200));",
+              "const address=\"famille.\"+pm.collectionVariables.get(\"runId\")+\"@example.test\";",
+              "const messages=pm.response.json().messages.filter(m=>(m.To||[]).some(t=>t.Address===address));",
+              "pm.test(\"Deux mails effectivement recus\",()=>pm.expect(messages.length).to.be.at.least(2));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "32 Supprimer alerte",
+      "request": {
+        "method": "DELETE",
+        "url": "{{alertsUrl}}/api/alerts/{{alertId}}",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "33 Verifier suppression alerte",
+      "request": {
+        "method": "GET",
+        "url": "{{alertsUrl}}/api/alerts/{{alertId}}",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 404\", () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "34 Supprimer protocole",
+      "request": {
+        "method": "DELETE",
+        "url": "{{alertsUrl}}/api/protocols/{{protocolId}}",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "35 Supprimer contact",
+      "request": {
+        "method": "DELETE",
+        "url": "{{benefUrl}}/contacts/{{contactId}}",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "36 Supprimer beneficiaire",
+      "request": {
+        "method": "DELETE",
+        "url": "{{benefUrl}}/beneficiaires/{{beneficiaryId}}",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "37 Supprimer assistant",
+      "request": {
+        "method": "DELETE",
+        "url": "{{usersUrl}}/api/utilisateurs/{{assistantId}}",
+        "header": [],
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{username}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{password}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,3 +1,5 @@
+> Version corrigee : consulter [LISEZMOI_CORRECTIONS](../LISEZMOI_CORRECTIONS.md) et la collection commune `../postman/TeleCare-Validation.postman_collection.json`. Les collections et indications de jalons ci-dessous sont historiques.
+
 # service-interventions
 
 Microservice du projet **Tele-Care** (assistance à domicile pour personnes âgées).

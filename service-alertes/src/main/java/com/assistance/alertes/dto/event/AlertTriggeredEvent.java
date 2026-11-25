@@ -7,7 +7,9 @@ public class AlertTriggeredEvent {
     private Long beneficiaryId;
     private String type;
     private String gravite;
+    @com.fasterxml.jackson.annotation.JsonFormat(shape = com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING)
     private LocalDateTime dateDeclenchement;
+    @com.fasterxml.jackson.annotation.JsonFormat(shape = com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING)
     private LocalDateTime timestamp;
 
     public AlertTriggeredEvent() {
@@ -80,8 +82,10 @@ public class AlertTriggeredEvent {
         private Long beneficiaryId;
         private String type;
         private String gravite;
-        private LocalDateTime dateDeclenchement;
-        private LocalDateTime timestamp;
+        @com.fasterxml.jackson.annotation.JsonFormat(shape = com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING)
+    private LocalDateTime dateDeclenchement;
+        @com.fasterxml.jackson.annotation.JsonFormat(shape = com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING)
+    private LocalDateTime timestamp;
 
         public Builder alertId(Long alertId) {
             this.alertId = alertId;

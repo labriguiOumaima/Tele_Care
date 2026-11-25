@@ -15,7 +15,10 @@ public record ContactRequest(
         String lien,
 
         @NotBlank(message = "Le téléphone est obligatoire")
-        String telephone
+        String telephone,
+
+        @Email(message = "Email invalide")
+        String email
 
 ) {
 }

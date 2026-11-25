@@ -30,7 +30,7 @@ public class BeneficiaryController {
             String idempotencyKey) {
 
         BeneficiaryResponse response =
-                beneficiaryService.create(request, idempotencyKey);
+                beneficiaryService.create(request);
 
         return ResponseEntity
                 .created(URI.create("/beneficiaires/" + response.id()))

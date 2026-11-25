@@ -76,6 +76,15 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
 
+    @ExceptionHandler(feign.FeignException.class)
+    public ResponseEntity<java.util.Map<String,Object>> handleFeign(feign.FeignException ex) {
+        int status=ex.status()==404?404:503;
+        return ResponseEntity.status(status).body(java.util.Map.of("status",status,"message",status==404?"Reference distante introuvable":"Service distant indisponible"));
+    }
+    @ExceptionHandler(io.github.resilience4j.circuitbreaker.CallNotPermittedException.class)
+    public ResponseEntity<java.util.Map<String,Object>> handleCircuit(Exception ex) {
+        return ResponseEntity.status(503).body(java.util.Map.of("status",503,"message","Service distant temporairement indisponible"));
+    }
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponseDTO> handleGenericException(
             Exception ex, HttpServletRequest request) {

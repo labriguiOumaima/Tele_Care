@@ -5,6 +5,7 @@ public record ContactDto(
         Long beneficiaryId,
         String nom,
         String lien,
-        String telephone
+        String telephone,
+        String email
 ) {
 }

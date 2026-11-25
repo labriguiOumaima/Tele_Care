@@ -28,7 +28,7 @@ public class ContactController {
             String idempotencyKey) {
 
         ContactResponse response =
-                contactService.create(request, idempotencyKey);
+                contactService.create(request);
 
         return ResponseEntity
                 .created(URI.create("/contacts/" + response.id()))
