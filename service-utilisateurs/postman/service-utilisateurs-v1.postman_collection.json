@@ -1,0 +1,295 @@
+{
+  "info": {
+    "name": "Service Utilisateurs - V2",
+    "description": "CRUD complet, pagination, activation/désactivation, vérification inter-service (rôle ASSISTANT).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8084"
+    },
+    {
+      "key": "utilisateurId",
+      "value": ""
+    },
+    {
+      "key": "username",
+      "value": "admin"
+    },
+    {
+      "key": "password",
+      "value": "admin123"
+    }
+  ],
+  "auth": {
+    "type": "basic",
+    "basic": [
+      { "key": "username", "value": "{{username}}", "type": "string" },
+      { "key": "password", "value": "{{password}}", "type": "string" }
+    ]
+  },
+  "item": [
+    {
+      "name": "1 - Créer un assistant",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nom\": \"Sara Benali\",\n  \"email\": \"sara.benali@telecare.ma\",\n  \"role\": \"ASSISTANT\"\n}"
+        },
+        "url": "{{baseUrl}}/api/utilisateurs"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Création réussie (201)', function () { pm.response.to.have.status(201); });",
+              "const u = pm.response.json();",
+              "pm.collectionVariables.set('utilisateurId', u.id);",
+              "pm.test('Utilisateur actif par défaut', function () { pm.expect(u.actif).to.eql(true); });",
+              "pm.test('Rôle ASSISTANT', function () { pm.expect(u.role).to.eql('ASSISTANT'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2 - Lister (paginé)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/utilisateurs?page=0&taille=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "utilisateurs"],
+          "query": [
+            { "key": "page",   "value": "0"  },
+            { "key": "taille", "value": "10" }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Liste paginée retournée (200)', function () { pm.response.to.have.status(200); });",
+              "const body = pm.response.json();",
+              "pm.test('Champs pagination présents', function () {",
+              "  pm.expect(body).to.have.property('contenu');",
+              "  pm.expect(body).to.have.property('totalElements');",
+              "  pm.expect(body).to.have.property('totalPages');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3 - Obtenir par ID",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/utilisateurs/{{utilisateurId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Utilisateur trouvé (200)', function () { pm.response.to.have.status(200); });",
+              "pm.test('ID correspond', function () {",
+              "  const id = parseInt(pm.collectionVariables.get('utilisateurId'));",
+              "  pm.expect(pm.response.json().id).to.eql(id);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "4 - Modifier",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nom\": \"Sara Benali Modifié\",\n  \"email\": \"sara.benali@telecare.ma\",\n  \"role\": \"ASSISTANT\"\n}"
+        },
+        "url": "{{baseUrl}}/api/utilisateurs/{{utilisateurId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Modification réussie (200)', function () { pm.response.to.have.status(200); });",
+              "pm.test('Nom mis à jour', function () {",
+              "  pm.expect(pm.response.json().nom).to.include('Modifié');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "5 - Vérifier assistant actif",
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/utilisateurs/{{utilisateurId}}/verification?role=ASSISTANT",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "utilisateurs", "{{utilisateurId}}", "verification"],
+          "query": [{ "key": "role", "value": "ASSISTANT" }]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Vérification réussie (200)', function () { pm.response.to.have.status(200); });",
+              "const v = pm.response.json();",
+              "pm.test('Assistant actif avec le bon rôle', function () {",
+              "  pm.expect(v.existe).to.eql(true);",
+              "  pm.expect(v.actif).to.eql(true);",
+              "  pm.expect(v.roleValide).to.eql(true);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "6 - Désactiver",
+      "request": {
+        "method": "PATCH",
+        "url": {
+          "raw": "{{baseUrl}}/api/utilisateurs/{{utilisateurId}}/actif?actif=false",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "utilisateurs", "{{utilisateurId}}", "actif"],
+          "query": [{ "key": "actif", "value": "false" }]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Désactivation réussie (200)', function () { pm.response.to.have.status(200); });",
+              "pm.test('Utilisateur inactif', function () { pm.expect(pm.response.json().actif).to.eql(false); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "7 - Vérifier assistant inactif (roleValide=true mais actif=false)",
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/utilisateurs/{{utilisateurId}}/verification?role=ASSISTANT",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "utilisateurs", "{{utilisateurId}}", "verification"],
+          "query": [{ "key": "role", "value": "ASSISTANT" }]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const v = pm.response.json();",
+              "pm.test('Utilisateur inactif détecté', function () {",
+              "  pm.expect(v.actif).to.eql(false);",
+              "  pm.expect(v.roleValide).to.eql(true);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8 - Réactiver",
+      "request": {
+        "method": "PATCH",
+        "url": {
+          "raw": "{{baseUrl}}/api/utilisateurs/{{utilisateurId}}/actif?actif=true",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "utilisateurs", "{{utilisateurId}}", "actif"],
+          "query": [{ "key": "actif", "avalue": "true" }]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Réactivation réussie (200)', function () { pm.response.to.have.status(200); });",
+              "pm.test('Utilisateur actif', function () { pm.expect(pm.response.json().actif).to.eql(true); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "9 - Email dupliqué (doit retourner 409)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nom\": \"Doublon\",\n  \"email\": \"sara.benali@telecare.ma\",\n  \"role\": \"ASSISTANT\"\n}"
+        },
+        "url": "{{baseUrl}}/api/utilisateurs"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Email dupliqué → 409 Conflict', function () { pm.response.to.have.status(409); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 - ID inexistant (doit retourner 404)",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/utilisateurs/99999"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('ID inexistant → 404 Not Found', function () { pm.response.to.have.status(404); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 - Supprimer",
+      "request": {
+        "method": "DELETE",
+        "url": "{{baseUrl}}/api/utilisateurs/{{utilisateurId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Suppression réussie (204)', function () { pm.response.to.have.status(204); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
